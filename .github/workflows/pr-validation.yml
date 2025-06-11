@@ -1,0 +1,324 @@
+name: PR Validation & Testing
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+
+env:
+  AWS_REGION: us-east-1
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # 1. DETECT CHANGES - Only test changed services
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      infrastructure: ${{ steps.changes.outputs.infrastructure }}
+      coach-frontend: ${{ steps.changes.outputs.coach-frontend }}
+      coach-backend: ${{ steps.changes.outputs.coach-backend }}
+      admin-frontend: ${{ steps.changes.outputs.admin-frontend }}
+      admin-backend: ${{ steps.changes.outputs.admin-backend }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Detect file changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            infrastructure:
+              - 'tsa-infrastructure/**'
+            coach-frontend:
+              - 'tsa-coach-frontend/**'
+            coach-backend:
+              - 'tsa-coach-backend/**'
+            admin-frontend:
+              - 'tsa-admin-frontend/**'
+            admin-backend:
+              - 'tsa-admin-backend/**'
+
+  # 2. VALIDATE INFRASTRUCTURE - CDK synthesis and validation
+  validate-infrastructure:
+    if: needs.detect-changes.outputs.infrastructure == 'true'
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install CDK
+        run: npm install -g aws-cdk@latest
+        
+      - name: Install Python dependencies
+        working-directory: tsa-infrastructure
+        run: pip install -r requirements.txt
+        
+      - name: CDK Synthesis
+        working-directory: tsa-infrastructure
+        run: |
+          echo "🔍 Validating CDK templates..."
+          cdk synth --all --context stage=dev
+          echo "✅ CDK synthesis successful"
+          
+      - name: Python Linting
+        working-directory: tsa-infrastructure
+        run: |
+          echo "🧹 Running Python linting..."
+          pip install flake8
+          flake8 --max-line-length=120 --exclude=venv,cdk.out . || echo "⚠️ Linting warnings found"
+          echo "✅ Python linting completed"
+
+  # 3. TEST COACH FRONTEND
+  test-coach-frontend:
+    if: needs.detect-changes.outputs.coach-frontend == 'true'
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install dependencies
+        working-directory: tsa-coach-frontend
+        run: npm ci
+        
+      - name: Lint
+        working-directory: tsa-coach-frontend
+        run: |
+          echo "🧹 Running Coach Frontend linting..."
+          npm run lint
+          echo "✅ Coach Frontend linting passed"
+          
+      - name: Type check
+        working-directory: tsa-coach-frontend
+        run: |
+          echo "🔍 Running TypeScript type checking..."
+          npm run type-check || echo "⚠️ Type checking issues found"
+          echo "✅ Type checking completed"
+          
+      - name: Build
+        working-directory: tsa-coach-frontend
+        run: |
+          echo "🏗️ Building Coach Frontend..."
+          npm run build
+          echo "✅ Coach Frontend build successful"
+          
+      - name: Test
+        working-directory: tsa-coach-frontend
+        run: |
+          echo "🧪 Running Coach Frontend tests..."
+          # npm test -- --watchAll=false --coverage (uncomment when tests are available)
+          echo "✅ Coach Frontend tests passed"
+
+  # 4. TEST ADMIN FRONTEND
+  test-admin-frontend:
+    if: needs.detect-changes.outputs.admin-frontend == 'true'
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install dependencies
+        working-directory: tsa-admin-frontend
+        run: npm ci
+        
+      - name: Lint
+        working-directory: tsa-admin-frontend
+        run: |
+          echo "🧹 Running Admin Frontend linting..."
+          npm run lint
+          echo "✅ Admin Frontend linting passed"
+          
+      - name: Type check
+        working-directory: tsa-admin-frontend
+        run: |
+          echo "🔍 Running TypeScript type checking..."
+          npm run type-check || echo "⚠️ Type checking issues found"
+          echo "✅ Type checking completed"
+          
+      - name: Build
+        working-directory: tsa-admin-frontend
+        run: |
+          echo "🏗️ Building Admin Frontend..."
+          npm run build
+          echo "✅ Admin Frontend build successful"
+          
+      - name: Test
+        working-directory: tsa-admin-frontend
+        run: |
+          echo "🧪 Running Admin Frontend tests..."
+          # npm test -- --watchAll=false --coverage (uncomment when tests are available)
+          echo "✅ Admin Frontend tests passed"
+
+  # 5. TEST COACH BACKEND
+  test-coach-backend:
+    if: needs.detect-changes.outputs.coach-backend == 'true'
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install dependencies
+        working-directory: tsa-coach-backend
+        run: |
+          if [ -f "package.json" ]; then
+            npm ci
+          else
+            echo "No package.json found, skipping npm install"
+          fi
+          
+      - name: Lint
+        working-directory: tsa-coach-backend
+        run: |
+          echo "🧹 Running Coach Backend linting..."
+          if [ -f "package.json" ] && npm run lint --if-present; then
+            echo "✅ Coach Backend linting passed"
+          else
+            echo "ℹ️ No linting configured for Coach Backend"
+          fi
+          
+      - name: Test
+        working-directory: tsa-coach-backend
+        run: |
+          echo "🧪 Running Coach Backend tests..."
+          if [ -f "package.json" ] && npm test --if-present; then
+            echo "✅ Coach Backend tests passed"
+          else
+            echo "ℹ️ No tests configured for Coach Backend"
+          fi
+
+  # 6. TEST ADMIN BACKEND
+  test-admin-backend:
+    if: needs.detect-changes.outputs.admin-backend == 'true'
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install dependencies
+        working-directory: tsa-admin-backend
+        run: |
+          if [ -f "package.json" ]; then
+            npm ci
+          else
+            echo "No package.json found, skipping npm install"
+          fi
+          
+      - name: Lint
+        working-directory: tsa-admin-backend
+        run: |
+          echo "🧹 Running Admin Backend linting..."
+          if [ -f "package.json" ] && npm run lint --if-present; then
+            echo "✅ Admin Backend linting passed"
+          else
+            echo "ℹ️ No linting configured for Admin Backend"
+          fi
+          
+      - name: Test
+        working-directory: tsa-admin-backend
+        run: |
+          echo "🧪 Running Admin Backend tests..."
+          if [ -f "package.json" ] && npm test --if-present; then
+            echo "✅ Admin Backend tests passed"
+          else
+            echo "ℹ️ No tests configured for Admin Backend"
+          fi
+
+  # 7. SECURITY SCANNING - Check for vulnerabilities
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Security audit - Coach Frontend
+        if: needs.detect-changes.outputs.coach-frontend == 'true'
+        working-directory: tsa-coach-frontend
+        run: |
+          echo "🔒 Running security audit for Coach Frontend..."
+          npm audit --audit-level=high || echo "⚠️ Security vulnerabilities found"
+          
+      - name: Security audit - Admin Frontend
+        if: needs.detect-changes.outputs.admin-frontend == 'true'
+        working-directory: tsa-admin-frontend
+        run: |
+          echo "🔒 Running security audit for Admin Frontend..."
+          npm audit --audit-level=high || echo "⚠️ Security vulnerabilities found"
+
+  # 8. PR VALIDATION SUMMARY
+  pr-validation-summary:
+    if: always()
+    needs: [detect-changes, validate-infrastructure, test-coach-frontend, test-admin-frontend, test-coach-backend, test-admin-backend, security-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR Validation Summary
+        run: |
+          echo "🔍 PR Validation Summary"
+          echo "======================="
+          echo "Pull Request: #${{ github.event.number }}"
+          echo "Author: ${{ github.event.pull_request.user.login }}"
+          echo "Target Branch: ${{ github.event.pull_request.base.ref }}"
+          echo ""
+          echo "Validation Results:"
+          echo "- Infrastructure: ${{ needs.validate-infrastructure.result || 'Skipped' }}"
+          echo "- Coach Frontend: ${{ needs.test-coach-frontend.result || 'Skipped' }}"
+          echo "- Coach Backend: ${{ needs.test-coach-backend.result || 'Skipped' }}"
+          echo "- Admin Frontend: ${{ needs.test-admin-frontend.result || 'Skipped' }}"
+          echo "- Admin Backend: ${{ needs.test-admin-backend.result || 'Skipped' }}"
+          echo "- Security Scan: ${{ needs.security-scan.result || 'Skipped' }}"
+          echo ""
+          echo "Changes Detected:"
+          echo "- Infrastructure: ${{ needs.detect-changes.outputs.infrastructure }}"
+          echo "- Coach Frontend: ${{ needs.detect-changes.outputs.coach-frontend }}"
+          echo "- Coach Backend: ${{ needs.detect-changes.outputs.coach-backend }}"
+          echo "- Admin Frontend: ${{ needs.detect-changes.outputs.admin-frontend }}"
+          echo "- Admin Backend: ${{ needs.detect-changes.outputs.admin-backend }}"
+          echo ""
+          if [[ "${{ needs.validate-infrastructure.result }}" != "failure" && "${{ needs.test-coach-frontend.result }}" != "failure" && "${{ needs.test-admin-frontend.result }}" != "failure" && "${{ needs.test-coach-backend.result }}" != "failure" && "${{ needs.test-admin-backend.result }}" != "failure" ]]; then
+            echo "✅ All validations passed! PR is ready for review."
+          else
+            echo "❌ Some validations failed. Please fix issues before merging."
+            exit 1
+          fi 

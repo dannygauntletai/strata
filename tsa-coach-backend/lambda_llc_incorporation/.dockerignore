@@ -1,0 +1,65 @@
+# Docker ignore file for LLC Incorporation Lambda
+# Exclude unnecessary files from Docker build context
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Development files
+.git/
+.gitignore
+.dockerignore
+README.md
+*.md
+
+# CDK files
+cdk.out/
+*.js.map
+*.d.ts
+
+# Test files
+test/
+tests/
+__tests__/
+*.test.*
+*.spec.*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Runtime files
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Temporary files
+tmp/
+temp/
+
+# Python cache (if any)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Keep only essential files:
+# - Dockerfile
+# - requirements.txt  
+# - docker_handler.py
+# - Any other Python source files needed 

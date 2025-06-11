@@ -1,0 +1,1124 @@
+STOP DEPLOYING LAMBDAS DIRECTLY, USE AWS CDK
+Do not start the frontend server, it is already started
+
+# Cursor Rules for Texas Sports Academy Project
+
+## Frontend Development Rules
+
+### React Best Practices
+
+#### Key Props for Lists (CRITICAL)
+- **ALWAYS** provide unique `key` props when rendering lists with `.map()`
+- Use stable, unique identifiers (like IDs) rather than array indices when possible
+- For dynamic lists, prefer database IDs or unique strings over indices
+
+**Examples:**
+```tsx
+// ✅ GOOD - Using unique identifiers
+{items.map((item) => (
+  <div key={item.id}>{item.name}</div>
+))}
+
+// ✅ GOOD - Using composite keys when needed  
+{items.map((item, index) => (
+  <div key={`${item.type}-${item.id}-${index}`}>{item.name}</div>
+))}
+
+// ❌ BAD - No key prop
+{items.map((item) => (
+  <div>{item.name}</div>  
+))}
+
+// ❌ BAD - Using array index (unless list is static)
+{items.map((item, index) => (
+  <div key={index}>{item.name}</div>
+))}
+```
+
+#### Conditional Rendering Keys
+- When conditionally rendering elements in loops, ensure each has a unique key
+- Use descriptive key prefixes to avoid collisions
+
+**Example:**
+```tsx
+// ✅ GOOD
+{coaches.map(coach => (
+  <div key={coach.id}>
+    {coach.school && <span key={`school-${coach.id}`}>School: {coach.school}</span>}
+    {coach.sport && <span key={`sport-${coach.id}`}>Sport: {coach.sport}</span>}
+  </div>
+))}
+```
+
+#### TROUBLESHOOTING: Persistent Key Warnings
+
+**Problem:** Getting "Each child in a list should have a unique key prop" even after adding keys
+
+**Common Causes & Solutions:**
+
+1. **Nested Conditional Elements Missing Keys:**
+```tsx
+// ❌ PROBLEM - Conditional elements inside map without keys
+{items.map(item => (
+  <div key={item.id}>
+    {item.subtitle && <span>Subtitle</span>} {/* Missing key! */}
+  </div>
+))}
+
+// ✅ SOLUTION - Add keys to conditional elements
+{items.map(item => (
+  <div key={item.id}>
+    {item.subtitle && <span key={`subtitle-${item.id}`}>Subtitle</span>}
+  </div>
+))}
+```
+
+2. **Fragment Lists Without Keys:**
+```tsx
+// ❌ PROBLEM
+{items.map(item => (
+  <>
+    <div>Content 1</div>
+    <div>Content 2</div>
+  </>
+))}
+
+// ✅ SOLUTION
+{items.map(item => (
+  <React.Fragment key={item.id}>
+    <div>Content 1</div>
+    <div>Content 2</div>
+  </React.Fragment>
+))}
+```
+
+3. **Multiple Adjacent Elements in Map:**
+```tsx
+// ❌ PROBLEM - Multiple elements returned from map
+{items.map(item => [
+  <div>Element 1</div>,
+  <div>Element 2</div>
+])}
+
+// ✅ SOLUTION - Wrap in container with key or give each element a key
+{items.map(item => (
+  <div key={item.id}>
+    <div>Element 1</div>
+    <div>Element 2</div>
+  </div>
+))}
+```
+
+4. **React Fragment in Conditional Render:**
+```tsx
+// ❌ PROBLEM - Fragment without key in conditional render
+{condition ? (
+  <div>Single element</div>
+) : (
+  <>  {/* Missing key! */}
+    <div>Element 1</div>
+    <div>Element 2</div>
+  </>
+)}
+
+// ✅ SOLUTION - Add key to React.Fragment
+import React from 'react'
+
+{condition ? (
+  <div>Single element</div>
+) : (
+  <React.Fragment key="content-fragment">
+    <div>Element 1</div>
+    <div>Element 2</div>
+  </React.Fragment>
+)}
+```
+
+**Debugging Steps:**
+1. Search for ALL `.map(` calls in the file
+2. Verify each mapped element has a unique key
+3. Check for conditional rendering inside maps
+4. Look for fragments or multiple adjacent elements
+5. Use React Developer Tools to identify the exact element
+6. Clear browser cache and restart dev server
+
+**Quick Fix Command:**
+```bash
+# Search for map calls missing keys
+grep -n "\.map(" src/**/*.tsx | grep -v "key="
+```
+
+### Component Architecture
+
+#### UI Cards with Buttons
+- **ALWAYS** stick buttons to the bottom of cards using flexbox
+- Use `mt-auto` or `flex-col` with `justify-end` for bottom alignment
+
+#### Table Responsiveness  
+- Use `lg:block` for desktop tables and `lg:hidden` for mobile cards
+- Avoid `overflow-x-auto` - prefer responsive card layouts on mobile
+
+#### Error Prevention
+- **Missing key props** - Use unique keys for ALL mapped elements AND conditionally rendered children
+- **Unused variables** - Remove or prefix with underscore
+- **Missing dependencies** - Include all dependencies in useEffect/useCallback
+- **State mutations** - Always use immutable updates
+
+#### Naming Conventions
+- Use descriptive variable names for keys: `key={`coach-${coach.id}`}` not `key={coach.id}`
+- Prefix keys with component context to avoid collisions
+- Use TypeScript for all new components
+
+---
+
+## Backend Development Rules
+
+### Infrastructure Architecture (UPDATED DECEMBER 2024)
+
+#### Restructured Portal Architecture
+
+**New Architecture:** Clear separation between Admins, Coaches, and Parents
+
+```
+🏗️ Infrastructure Layer (Shared)
+├── 🌐 Networking Stack
+├── 🔐 Security Stack  
+├── 🗄️ Data Stack
+├── 🔑 Passwordless Auth Stack
+└── 🚀 Migration Stack
+
+📱 Application Layer (Portal-Specific)
+├── 👨‍🏫 Coach Portal Service (Coach-only functionality)
+├── 👨‍👩‍👧‍👦 Parent Portal Service (Parent-only functionality)  
+└── 👩‍💼 Admin Portal Service (Admin-only functionality)
+
+🖥️ Frontend Layer
+├── 🎯 Unified Frontend (Coach + Parent with role-based routing)
+└── ⚙️ Admin Frontend (Separate admin interface)
+```
+
+#### Portal-Specific Development Guidelines
+
+**Coach Portal Service (tsa-coach-backend-{stage})**
+```python
+# ✅ Coach Portal Responsibilities
+- Coach onboarding and profile management
+- Parent invitation creation and management  
+- Coach dashboard and analytics
+- Communication with parents (coach side)
+
+# ❌ NOT Coach Portal Responsibilities
+- Parent enrollment process
+- Document verification
+- Parent-side scheduling
+- System administration
+```
+
+**Parent Portal Service (tsa-parent-backend-{stage})**
+```python
+# ✅ Parent Portal Responsibilities  
+- Enrollment process and status tracking
+- Document upload and management
+- Communication with coaches (parent side)
+- Appointment scheduling (parent side)
+
+# ❌ NOT Parent Portal Responsibilities
+- Coach management
+- System administration
+- Other parent's data
+- Coach onboarding
+```
+
+**Admin Portal Service (tsa-admin-backend-{stage})**
+```python
+# ✅ Admin Portal Responsibilities
+- Coach management and oversight
+- System analytics and reporting
+- Audit logging and compliance
+- Cross-portal data access for administration
+
+# ❌ NOT Admin Portal Responsibilities
+- Day-to-day parent operations
+- Individual coach workflows
+- Direct parent communication
+- Routine enrollment processing
+```
+
+#### Data Organization by Portal
+
+| Table | Owner | Access Pattern |
+|-------|-------|----------------|
+| `profiles-v3-{stage}` | Coach Portal | Coach: R/W, Parent: R, Admin: R/W |
+| `parent-invitations-v3-{stage}` | Coach Portal | Coach: R/W, Parent: R, Admin: R |
+| `tsa-parent-enrollments-v3-{stage}` | Parent Portal | Parent: R/W, Coach: R, Admin: R |
+| `tsa-parent-documents-v3-{stage}` | Parent Portal | Parent: R/W, Admin: R |
+| `coach-invitations-v3-{stage}` | Admin Portal | Admin: R/W, Coach: R |
+| `admin-audit-logs-v3-{stage}` | Admin Portal | Admin: R/W |
+
+#### API Endpoint Organization
+
+```python
+# Coach Portal API (/coach/*)
+"/coach/onboard"           # Coach onboarding
+"/coach/profile"           # Coach profile management
+"/coach/parent-invitations" # Parent invitation management
+"/coach/dashboard"         # Coach dashboard
+
+# Parent Portal API (/admissions/*)  
+"/admissions/validate-invitation"    # Public: Validate invitation
+"/admissions/enrollments"           # Enrollment management
+"/admissions/documents"             # Document uploads
+"/admissions/communication"         # Parent-coach messaging
+
+# Admin Portal API (/admin/*)
+"/admin/coaches"           # Coach management
+"/admin/invitations"       # Coach invitation management  
+"/admin/analytics"         # System analytics
+"/admin/audit"            # Audit logs
+```
+
+#### Authentication Strategy by User Type
+
+| User Type | Authentication Method | Authorization Level |
+|-----------|----------------------|-------------------|
+| **Parents** | Public endpoints (no auth) | Rate-limited access to enrollment |
+| **Coaches** | Cognito JWT tokens | Full access to coach functionality |
+| **Admins** | Enhanced authentication | Full system access with audit logging |
+
+### Lambda Development
+
+#### Parent Invitation 404 Error Fix
+
+**Problem:** Coaches getting 404 "Coach not found" when creating parent invitations
+
+**Root Cause:** Lambda function requires coach profile in `profiles-v3-dev` table, but no coaches exist in development
+
+**Solution:** Development mode fallback for coach validation
+
+```python
+# ✅ FIXED IMPLEMENTATION
+def create_parent_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a new parent invitation"""
+    try:
+        # ... validation logic ...
+        
+        # Check if this is a development environment
+        stage = os.environ.get('STAGE', 'dev')
+        
+        if stage == 'dev':
+            # Development mode: Skip coach validation and use default values
+            coach_profile = {
+                'profile_id': f"dev-coach-{body['coach_id'].replace('@', '-').replace('.', '-')}",
+                'email': body['coach_id'],
+                'role_type': 'coach',
+                'first_name': 'Development',
+                'last_name': 'Coach',
+                'school_id': 'dev-school-001',
+                'created_at': get_current_timestamp(),
+                'status': 'active'
+            }
+            actual_coach_id = coach_profile['profile_id']
+        else:
+            # Production mode: Require actual coach validation
+            # ... existing coach lookup logic ...
+```
+
+**When to Use This Pattern:**
+- Development environments where coach profiles don't exist yet
+- Early development phases before coach onboarding is complete
+- Testing scenarios requiring parent invitations without full coach setup
+
+**Production Considerations:**
+- Always validate coach profiles exist in production
+- Use proper coach authentication in production
+- Remove development fallbacks for production deployments
+
+#### Lambda Architecture Strategy (UPDATED)
+
+**Philosophy:** **Self-Contained Business Logic with Shared Utilities**
+
+**Hybrid Approach for Maximum Reliability:**
+
+1. **✅ SHARED UTILITIES (ALLOWED):**
+   - Common utility functions (create_response, parse_event_body, validation)
+   - Database connection helpers  
+   - Standard formatting and error handling
+   - Well-tested, stable utility functions
+
+2. **✅ SELF-CONTAINED BUSINESS LOGIC (REQUIRED):**
+   - Domain-specific validation logic inline
+   - Core business rules and workflows
+   - Entity-specific processing logic
+   - Complex application logic
+
+**Architecture Pattern:**
+```python
+# ✅ RECOMMENDED APPROACH - Hybrid Strategy
+"""
+Lambda handler with shared utilities + self-contained business logic
+"""
+import json
+import os
+import boto3
+import uuid
+from typing import Dict, Any, List
+from datetime import datetime, timedelta
+
+# ✅ SHARED UTILITIES - Import from well-tested shared layer
+try:
+    from shared_utils import (
+        create_response,           # Standardized API responses
+        parse_event_body,          # Request parsing
+        validate_required_fields,  # Basic validation
+        get_current_timestamp,     # Timestamp utilities
+        get_dynamodb_table        # Database helpers
+    )
+    SHARED_UTILS_AVAILABLE = True
+except ImportError:
+    # ✅ FALLBACK - Inline utilities if shared layer fails
+    SHARED_UTILS_AVAILABLE = False
+    
+    def create_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "statusCode": status_code,
+            "headers": {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Requested-With",
+                "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+                "Content-Type": "application/json"
+            },
+            "body": json.dumps(body, default=str)
+        }
+    
+    def parse_event_body(event: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            body = event.get('body', '{}')
+            if isinstance(body, str):
+                return json.loads(body) if body else {}
+            return body if isinstance(body, dict) else {}
+        except Exception:
+            return {}
+
+# ✅ BUSINESS LOGIC - Always inline and self-contained
+def validate_enrollment_business_rules(enrollment_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Domain-specific enrollment validation - always inline"""
+    # Keep complex business logic in the Lambda function
+    if enrollment_data.get('student_age', 0) < 5:
+        return {'valid': False, 'error': 'Student must be at least 5 years old'}
+    
+    if not enrollment_data.get('parent_consent', False):
+        return {'valid': False, 'error': 'Parent consent required'}
+    
+    return {'valid': True}
+
+def process_enrollment_workflow(enrollment_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Core enrollment processing - always inline"""
+    # Keep workflow logic in the Lambda function
+    steps = ['info_collected', 'consultation_scheduled', 'shadow_day_completed', 'enrolled']
+    current_step = enrollment_data.get('current_step', 0)
+    
+    if current_step >= len(steps):
+        return {'status': 'completed', 'next_step': None}
+    
+    return {'status': 'in_progress', 'next_step': steps[current_step]}
+
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Main handler using hybrid approach"""
+    try:
+        # ✅ Use shared utility for common operations
+        body = parse_event_body(event)
+        
+        # ✅ Use shared utility for basic validation
+        validation = validate_required_fields(body, ['enrollment_id'])
+        if not validation['valid']:
+            return create_response(400, {'error': validation['error']})
+        
+        # ✅ Self-contained business logic (always inline)
+        business_validation = validate_enrollment_business_rules(body)
+        if not business_validation['valid']:
+            return create_response(400, {'error': business_validation['error']})
+        
+        # ✅ Self-contained workflow processing (always inline)
+        workflow_result = process_enrollment_workflow(body)
+        
+        return create_response(200, {
+            'enrollment_id': body['enrollment_id'],
+            'workflow_status': workflow_result,
+            'timestamp': get_current_timestamp() if SHARED_UTILS_AVAILABLE else datetime.utcnow().isoformat()
+        })
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return create_response(500, {'error': 'Internal server error'})
+
+#### Shared Utilities Guidelines
+
+**✅ SAFE TO SHARE:**
+```python
+# Utility functions - Low risk, high reuse value
+def create_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]
+def parse_event_body(event: Dict[str, Any]) -> Dict[str, Any]
+def validate_required_fields(data: Dict[str, Any], fields: List[str]) -> Dict[str, Any]
+def get_current_timestamp() -> str
+def get_dynamodb_table(table_name: str)
+def validate_email_format(email: str) -> bool
+def format_error_response(error: Exception) -> Dict[str, Any]
+```
+
+**❌ NEVER SHARE:**
+```python
+# Business logic - Keep inline for reliability
+def validate_enrollment_requirements(data)    # Domain-specific rules
+def process_payment_workflow(payment_data)    # Business workflow
+def calculate_tuition_amounts(student_data)   # Business calculations
+def determine_student_eligibility(criteria)   # Complex business logic
+```
+
+#### Import Strategy with Fallbacks
+
+**Pattern 1: Graceful Degradation**
+```python
+# ✅ RECOMMENDED - Try shared utilities, fallback to inline
+try:
+    from shared_utils import create_response, parse_event_body
+    SHARED_AVAILABLE = True
+except ImportError:
+    SHARED_AVAILABLE = False
+    # Inline fallback definitions here
+```
+
+**Pattern 2: Conditional Import**
+```python
+# ✅ ALTERNATIVE - Import with environment check
+import os
+
+if os.environ.get('USE_SHARED_UTILS', 'true').lower() == 'true':
+    try:
+        from shared_utils import *
+    except ImportError:
+        # Inline definitions as fallback
+        pass
+```
+
+#### Development Best Practices
+
+1. **Shared Utilities Development:**
+   - Write comprehensive tests for all shared functions
+   - Keep utilities stateless and pure functions
+   - Avoid complex dependencies in shared code
+   - Version shared utilities and test compatibility
+
+2. **Business Logic Development:**
+   - Always keep domain logic inline in Lambda functions
+   - Write business logic tests within each Lambda
+   - Avoid sharing complex business rules across functions
+   - Make business logic self-documenting
+
+3. **Deployment Verification:**
+   - Test shared utility functions in isolation
+   - Test Lambda functions with and without shared layer
+   - Verify fallback mechanisms work correctly
+   - Monitor CloudWatch for import warnings
+
+4. **Import Guidelines (Updated):**
+   - Standard library imports: ✅ Always work
+   - AWS SDK (boto3): ✅ Always available  
+   - Shared utility functions: ✅ Use with fallbacks
+   - External packages in layer: ✅ Usually work
+   - Business logic modules: ❌ Keep inline
+
+#### Debugging Shared Utilities
+
+1. **Test Shared Layer Accessibility:**
+```python
+def test_shared_imports():
+    """Test function to verify shared utilities"""
+    try:
+        from shared_utils import create_response
+        return create_response(200, {"shared_utils": "available"})
+    except ImportError as e:
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"shared_utils": "unavailable", "error": str(e)})
+        }
+```
+
+2. **Check Layer Configuration:**
+```bash
+# Verify shared layer structure
+aws lambda get-layer-version --layer-name shared-utils-layer --version-number 1
+```
+
+3. **Monitor Import Performance:**
+```python
+import time
+start_time = time.time()
+try:
+    from shared_utils import create_response
+    import_time = time.time() - start_time
+    print(f"Shared utils import time: {import_time:.3f}s")
+except ImportError:
+    print("Shared utils import failed")
+```
+
+#### Standard Shared Utilities Template
+
+**shared_utils.py Structure:**
+```python
+"""
+Shared utilities for Texas Sports Academy Lambda functions
+Stable, well-tested utility functions only
+"""
+import json
+import os
+import boto3
+from typing import Dict, Any, List
+from datetime import datetime
+
+def create_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    """Create standardized API response with CORS headers"""
+    return {
+        "statusCode": status_code,
+        "headers": {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Requested-With",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+            "Content-Type": "application/json"
+        },
+        "body": json.dumps(body, default=str)
+    }
+
+def parse_event_body(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Parse request body from API Gateway event"""
+    try:
+        body = event.get('body', '{}')
+        if event.get('isBase64Encoded', False):
+            import base64
+            body = base64.b64decode(body).decode('utf-8')
+        if isinstance(body, str):
+            return json.loads(body) if body else {}
+        return body if isinstance(body, dict) else {}
+    except Exception:
+        return {}
+
+def validate_required_fields(data: Dict[str, Any], required_fields: List[str]) -> Dict[str, Any]:
+    """Validate that required fields are present in data"""
+    missing_fields = [field for field in required_fields if field not in data or not data[field]]
+    if missing_fields:
+        return {
+            'valid': False,
+            'error': f"Missing required fields: {', '.join(missing_fields)}"
+        }
+    return {'valid': True}
+
+def get_current_timestamp() -> str:
+    """Get current ISO timestamp"""
+    return datetime.utcnow().isoformat() + 'Z'
+
+def get_dynamodb_table(table_name: str):
+    """Get DynamoDB table resource"""
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        return dynamodb.Table(table_name)
+    except Exception as e:
+        print(f"Error getting DynamoDB table {table_name}: {str(e)}")
+        raise
+
+# Add more stable utilities as needed, but keep it focused
+```
+
+#### Migration Strategy
+
+**For Existing Self-Contained Lambdas:**
+1. Identify common utility functions that can be shared
+2. Move utilities to shared layer with comprehensive tests
+3. Update Lambda functions to use hybrid import pattern
+4. Keep business logic inline
+5. Test thoroughly with both shared and fallback modes
+
+**For New Lambda Functions:**
+1. Start with shared utilities for common operations  
+2. Write business logic inline from the beginning
+3. Use the hybrid import pattern as standard
+4. Test fallback mechanisms during development
+
+### Error Handling
+
+#### Testing & Cleanup
+- Delete test scripts after they're working (per user rule)
+- Don't start local dev servers unless requested
+- Implement fixes immediately when suggested
+
+#### Debugging Lambda Import Issues
+
+1. **Check CloudWatch Logs:**
+```bash
+aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/function-name"
+aws logs tail /aws/lambda/function-name --follow
+```
+
+2. **Test Import Isolation:**
+   - Create minimal test handler
+   - Remove all custom imports
+   - Add imports one by one to identify problematic modules
+
+3. **Verify Shared Layer Structure:**
+```bash
+# Check shared layer contents
+ls -la lambda_function/shared_layer/python/
+```
+
+---
+
+## Infrastructure & Deployment
+
+### CDK Deployment
+
+#### AWS Lambda Deployment Issues
+
+**Problem:** CDK shows "no changes" even after updating Lambda code
+
+**Common Causes & Solutions:**
+
+1. **CDK Not Detecting Lambda Code Changes:**
+```bash
+# ❌ PROBLEM - CDK may not detect file changes
+cdk deploy StackName
+
+# ✅ SOLUTION - Force deployment to rebuild Lambda
+cdk deploy StackName --force
+```
+
+3. **Verify Deployment Success:**
+```bash
+# Test endpoint after deployment
+curl -X DELETE "https://api-url/admin/coaches/test-id" \
+  -H "Authorization: Bearer $(echo -n 'admin@email.com' | base64)" \
+  -H "Content-Type: application/json"
+```
+
+**Stack Identification (Updated for New Architecture):**
+- Coach Portal Lambda: `tsa-coach-backend-{stage}` stack
+- Parent Portal Lambda: `tsa-parent-backend-{stage}` stack
+- Admin Portal Lambda: `tsa-admin-backend-{stage}` stack
+- DynamoDB Tables: Portal-specific tables with v3 naming
+- API Gateways: Separate for each portal
+- Frontend: Unified frontend + separate admin frontend
+
+**Deployment Time Indicators:**
+- "no changes" = CDK didn't rebuild Lambda
+- 60+ seconds = Lambda code was actually updated
+
+#### Deployment Order for New Architecture
+
+```bash
+# Infrastructure Layer (shared)
+cdk deploy tsa-infra-networking-{stage}
+cdk deploy tsa-infra-security-{stage}
+cdk deploy tsa-infra-data-{stage}
+cdk deploy tsa-infra-auth-{stage}
+
+# Application Layer (portal-specific)
+cdk deploy tsa-coach-backend-{stage}      # Deploy first (base tables)
+cdk deploy tsa-parent-backend-{stage}     # Deploy second (depends on coach)
+cdk deploy tsa-admin-backend-{stage}      # Deploy third (depends on both)
+
+# Frontend Layer
+cdk deploy tsa-infra-frontend-{stage}     # Deploy last (depends on all APIs)
+```
+
+### AWS Resource Management
+
+#### AWS Resource Naming Conflicts
+
+**Problem:** CDK deployment fails with resource conflicts when redeploying infrastructure
+
+**Common Causes & Solutions:**
+
+1. **Existing IAM Roles:**
+```bash
+# Check for conflicting roles
+aws iam list-roles | grep -i "project-name"
+
+# Solution: Update CDK stack to use unique names
+role_name=f"project-name-v2-{stage}"  # Add version suffix
+```
+
+2. **Existing Secrets Manager Secrets:**
+```bash
+# Check for conflicting secrets
+aws secretsmanager list-secrets --region us-east-1 | grep -i "project-name"
+
+# Solution: Update secret names
+secret_name=f"project/secret-v2-{stage}"  # Add version suffix
+```
+
+3. **Existing RDS Instances:**
+```bash
+# Check for conflicting databases
+aws rds describe-db-instances | grep -i "project-name"
+
+# Solution: Update instance identifier
+instance_identifier=f"project-db-v2-{stage}"  # Add version suffix
+```
+
+4. **CloudFormation Export Name Conflicts:**
+```bash
+# Solution: Update export names in CDK
+export_name=f"ResourceName-v2-{stage}"  # Add version suffix
+```
+
+**Resolution Strategy:**
+- Add version suffixes (v2, v3, etc.) to all resource names
+- Update IAM roles, secrets, databases, S3 buckets, and export names
+- Redeploy with non-conflicting names
+- Clean up old resources after successful deployment
+
+**Example Fix Applied:**
+```python
+# Before (conflicting)
+role_name=f"texas-sports-academy-coach-portal-lambda-role-{stage}"
+secret_name=f"texas-sports-academy-coach/database-{stage}"
+
+# After (non-conflicting)
+role_name=f"texas-sports-academy-coach-portal-lambda-role-v2-{stage}"
+secret_name=f"texas-sports-academy-coach/database-v2-{stage}"
+```
+
+---
+
+## Security Considerations
+
+### CORS Configuration
+
+**WARNING:** The current CORS configuration uses wildcard (*) origins in some places.
+
+**Current Configuration:**
+```python
+allow_origins=["*"]  # ❌ TOO PERMISSIVE for production
+```
+
+**Production CORS Best Practices:**
+
+1. **Specific Origin Allowlisting:**
+```python
+# ✅ GOOD - Specific origins only
+allow_origins=[
+    "https://coach.texassportsacademy.com",
+    "https://admin.texassportsacademy.com",
+    "http://localhost:3000",  # Development only
+    "http://localhost:3001"   # Development only
+]
+```
+
+2. **Environment-Specific CORS:**
+```python
+# ✅ GOOD - Different origins per environment
+cors_origins = {
+    "dev": {
+        "unified": [  # Parent + Coach unified frontend
+            "http://localhost:3000",
+            "https://localhost:3000"
+        ],
+        "admin": [  # Admin frontend
+            "http://localhost:3001", 
+            "https://localhost:3001"
+        ]
+    },
+    "staging": {
+        "unified": [
+            "https://staging-coach.texassportsacademy.com"
+        ],
+        "admin": [
+            "https://staging-admin.texassportsacademy.com"
+        ]
+    },
+    "prod": {
+        "unified": [
+            "https://coach.texassportsacademy.com"
+        ],
+        "admin": [
+            "https://admin.texassportsacademy.com"
+        ]
+    }
+}
+```
+
+3. **Restricted Methods and Headers:**
+```python
+# ✅ GOOD - Only allow necessary methods
+allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Remove PATCH, HEAD if not needed
+
+# ✅ GOOD - Minimal required headers
+allow_headers=[
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With"
+    # Remove unnecessary headers in production
+]
+```
+
+### Authentication Best Practices
+
+**Current State Analysis (Updated for New Architecture):**
+- **Parent endpoints:** Public (no auth) - appropriate for parent access
+- **Coach endpoints:** Cognito authentication required
+- **Admin endpoints:** Enhanced authentication (temporary solution)
+
+**Production Authentication Recommendations:**
+
+1. **Multi-Tiered Authentication:**
+```python
+# Parent endpoints (public) - rate limiting only
+"/admissions/validate-invitation" -> No auth, rate limited
+
+# Coach endpoints - Cognito JWT
+"/coach/*" -> Cognito Bearer token required
+
+# Admin endpoints - Enhanced authentication
+"/admin/*" -> Multi-factor authentication required
+```
+
+2. **Rate Limiting by Portal Type:**
+```python
+# Different rate limits based on portal and sensitivity
+rate_limits = {
+    "parent_endpoints": "100 requests/minute",
+    "coach_endpoints": "500 requests/minute", 
+    "admin_endpoints": "50 requests/minute"
+}
+```
+
+3. **Input Validation & Sanitization:**
+```python
+# ✅ ALWAYS validate all inputs
+def validate_input(data: Dict[str, Any]) -> bool:
+    # Check for SQL injection patterns
+    # Validate data types and ranges
+    # Sanitize string inputs
+    # Check for XSS patterns
+    return True
+```
+
+4. **Audit Logging:**
+```python
+# ✅ Log all sensitive operations
+def log_security_event(event_type: str, user_id: str, details: Dict[str, Any]):
+    security_log = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "event_type": event_type,
+        "user_id": user_id,
+        "ip_address": get_client_ip(),
+        "user_agent": get_user_agent(),
+        "details": details
+    }
+    # Send to security monitoring system
+```
+
+### Data Protection
+
+**Sensitive Data Handling:**
+```python
+# ✅ GOOD - Filter sensitive data from responses
+def sanitize_response(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove sensitive fields from API responses"""
+    sensitive_fields = ['password', 'ssn', 'credit_card', 'token_secret']
+    return {k: v for k, v in data.items() if k not in sensitive_fields}
+```
+
+**Encryption Requirements:**
+- ✅ All data in transit (HTTPS only)
+- ✅ Database encryption at rest  
+- ✅ Secrets Manager for credentials
+- ⚠️ Consider client-side encryption for PII
+
+---
+
+**Last Updated:** June 2025 - Added Parent Invitation 404 Error Fix + Restructured Portal Architecture + Clear Admin/Coach/Parent Separation  
+**Common Issues:** Missing key props in mapped lists, Lambda import failures, CDK deployment issues, CORS security, authentication best practices, parent invitation coach validation in development
+
+Rule 0 - When you suggest a fix or implementation, go ahead with the implementation
+Rule 1 - Do NOT start the local development server
+Rule 2 - When creating a UI card that has a button, ALWAYS make sure the button is stickied to the bottom of the card
+Rule 3- Delete any test scripts after they are working
+Rule 4- If code fails and there is no clear fix, add logs to debug. After it is working, remove the logs. Add the fix to our .cursorrules so we avoid it in the future
+Rule5- If introducing a new pattern to replace an old one, remove the old implementation
+Rule6- Never name files "improved-something" or "refactored-something"
+Rule7- Avoid code duplication by checking for similar existing functionality
+Rule8- Maintain a clean, organized codebase
+Rule9- Do NOT zip our lambda for deployment. Always go through CDK
+Rule10- Use unified frontend URLs: Parent portal and coach portal are the same application with role-based routing. Use FRONTEND_URL environment variable, not separate PARENT_FRONTEND_URL or ADMISSIONS_FRONTEND_URL
+Rule11- Follow the restructured portal architecture: Coach Portal (coach-only), Parent Portal (parent-only), Admin Portal (admin-only). Do not mix concerns between portals.
+
+#### Lambda Dependency Size Limits (FIXED ISSUE)
+
+**Problem:** Lambda functions crash with 502 errors when using large dependencies like Playwright
+
+**Root Cause:** Playwright includes browser binaries (~200MB+) that often exceed Lambda layer size limits (250MB unzipped) or cause import timeouts
+
+**Solution Options:**
+1. **Container Images** - Use Lambda container images for large dependencies
+2. **External Browser Services** - Use Browserbase, Puppeteer on external servers
+3. **Dependency-Free Approach** - Mock/simulate browser automation for development
+4. **Layer Optimization** - Minimize layer size by excluding unnecessary files
+
+**Example Fix Applied:**
+```python
+# ❌ PROBLEM - Large dependencies in Lambda layer
+from playwright.async_api import async_playwright  # 200MB+ with binaries
+from browserbase import Browserbase
+
+# ✅ SOLUTION - Use container image or external service
+# For development: Mock the functionality
+def perform_incorporation_mock(data):
+    return {"success": True, "message": "Mock incorporation completed"}
+```
+
+**Deployment Verification:**
+- 502 Error = Dependency too large or import failure
+- 200 Success = Dependencies working correctly
+- Check function size: AWS Lambda console → Configuration → General configuration
+
+#### Docker Container Approach for Playwright (PROVEN SOLUTION)
+
+**Problem:** Playwright dependencies exceed Lambda's 250MB ZIP package limit
+
+**Solution:** Use Docker container images with AWS Lambda (supports up to 10GB)
+
+**Reference:** Based on [Dr. Luiz Verçosa's proven approach](https://medium.com/@luizfelipeverosa/serverless-web-scraping-with-playwright-and-aws-lambda-450b7a3fa42e)
+
+**Implementation Pattern:**
+```dockerfile
+# Use AWS Lambda Python base image
+FROM public.ecr.aws/lambda/python:3.11
+
+# Install system dependencies for Playwright/Chromium
+RUN yum update -y && \
+    yum install -y \
+    alsa-lib \
+    atk \
+    cups-libs \
+    gtk3 \
+    libdrm \
+    # ... other required system libraries
+    && yum clean all
+
+# Install Python dependencies
+COPY requirements.txt ${LAMBDA_TASK_ROOT}
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright and browsers
+RUN playwright install chromium
+RUN playwright install-deps
+
+# Critical: Set HOME to writable directory
+ENV HOME=/tmp
+
+# Copy function code
+COPY docker_handler.py ${LAMBDA_TASK_ROOT}/lambda_function.py
+
+CMD ["lambda_function.lambda_handler"]
+```
+
+**Lambda Configuration:**
+- Memory: 3008 MB (maximum for container images)
+- Timeout: 900 seconds (15 minutes)
+- Package Type: Image
+- Environment Variables: `HOME=/tmp`, `STAGE=dev`
+
+**Browser Launch Arguments (Lambda-Optimized):**
+```python
+browser_args = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox', 
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process',
+    '--disable-gpu',
+    # ... additional Lambda-optimized flags
+]
+
+browser = await p.chromium.launch(headless=True, args=browser_args)
+```
+
+**Deployment Process:**
+1. Build Docker image with `--platform linux/amd64`
+2. Push to Amazon ECR
+3. Create/update Lambda function with container image
+4. Set high memory and timeout configurations
+
+**Advantages:**
+- ✅ No dependency size limits (up to 10GB vs 250MB ZIP limit)
+- ✅ Full Playwright API compatibility
+- ✅ All browser binaries included
+- ✅ Proven approach with multiple successful implementations
+- ✅ Better isolation and reproducibility
+
+**When to Use:**
+- Any Lambda function requiring Playwright/Puppeteer
+- Complex browser automation workflows
+- Functions needing large dependencies
+- Production-ready web scraping/automation
+
+#### Browserbase API Limitations (DISCOVERED ISSUE)
+
+**Problem:** Browserbase doesn't support programmatic automation via REST API
+
+**Discovery:** Through diagnostic testing, found that Browserbase API endpoints for navigation and script execution don't exist:
+- ❌ `/v1/sessions/{id}/navigate` → 405 Method Not Allowed
+- ❌ `/v1/sessions/{id}/execute` → 405 Method Not Allowed
+- ✅ `/v1/sessions` → Works (session creation)
+- ✅ `/v1/sessions/{id}/debug` → Works (live view only)
+
+**What Browserbase Actually Provides:**
+- Live browser sessions for manual debugging
+- Debug view URLs for visual inspection
+- Session management and lifecycle
+
+**What Browserbase Does NOT Provide:**
+- Programmatic navigation APIs
+- Script execution endpoints
+- Automated form filling
+- Headless automation control
+
+**Lesson Learned:**
+Always verify third-party API capabilities through direct testing before implementing full solutions. Service documentation may not clearly indicate API limitations.
+
+**Alternative Approaches:**
+1. **Docker Container + Playwright** (✅ RECOMMENDED)
+2. **External automation services** (research required)
+3. **Hybrid approach** (container for automation + Browserbase for debugging)
+
+#### Best Practices for Lambda Container Images
+
+**Development Workflow:**
+```bash
+# 1. Build and test locally
+docker build --platform linux/amd64 -t my-lambda .
+docker run -p 9000:8080 my-lambda
+
+# 2. Test Lambda Runtime Interface
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" \
+  -d '{"test": "data"}'
+
+# 3. Deploy to ECR and Lambda
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ACCOUNT.dkr.ecr.us-east-1.amazonaws.com
+docker tag my-lambda $ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/my-repo:latest
+docker push $ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/my-repo:latest
+```
+
+**Container Optimization:**
+- Use multi-stage builds to reduce image size
+- Install only necessary system dependencies
+- Use `.dockerignore` to exclude development files
+- Pin dependency versions for reproducibility
+
+**Monitoring:**
+- CloudWatch logs for container startup and execution
+- X-Ray tracing for performance analysis
+- Custom metrics for automation success rates
+- S3 screenshots for debugging automation failures

@@ -1,0 +1,24 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - echo "Installing dependencies for TSA Coach Frontend..."
+        - npm ci
+    build:
+      commands:
+        - echo "Building Next.js app..."
+        - echo "API URL: $NEXT_PUBLIC_API_URL"
+        - echo "Stage: $NEXT_PUBLIC_STAGE" 
+        - npm run build
+    postBuild:
+      commands:
+        - echo "Build completed successfully"
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*

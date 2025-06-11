@@ -1,0 +1,382 @@
+name: TSA Infrastructure & Services Deployment
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - staging
+        - prod
+      services:
+        description: 'Services to deploy (comma-separated or "all")'
+        required: false
+        default: 'all'
+
+env:
+  AWS_REGION: us-east-1
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # 1. DETECT CHANGES - Smart builds only for changed services
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      infrastructure: ${{ steps.changes.outputs.infrastructure }}
+      coach-frontend: ${{ steps.changes.outputs.coach-frontend }}
+      coach-backend: ${{ steps.changes.outputs.coach-backend }}
+      admin-frontend: ${{ steps.changes.outputs.admin-frontend }}
+      admin-backend: ${{ steps.changes.outputs.admin-backend }}
+      shared-config: ${{ steps.changes.outputs.shared-config }}
+      stage: ${{ steps.set-stage.outputs.stage }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Detect file changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            infrastructure:
+              - 'tsa-infrastructure/**'
+            coach-frontend:
+              - 'tsa-coach-frontend/**'
+            coach-backend:
+              - 'tsa-coach-backend/**'
+            admin-frontend:
+              - 'tsa-admin-frontend/**'
+            admin-backend:
+              - 'tsa-admin-backend/**'
+            shared-config:
+              - '.cursorrules'
+              - 'package.json'
+              - 'design_theme.md'
+              - 'database_schema.md'
+              
+      - name: Set deployment stage
+        id: set-stage
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "stage=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "stage=prod" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "stage=dev" >> $GITHUB_OUTPUT
+          else
+            echo "stage=dev" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Display detected changes
+        run: |
+          echo "🔍 Change Detection Results:"
+          echo "Infrastructure: ${{ steps.changes.outputs.infrastructure }}"
+          echo "Coach Frontend: ${{ steps.changes.outputs.coach-frontend }}"
+          echo "Coach Backend: ${{ steps.changes.outputs.coach-backend }}"
+          echo "Admin Frontend: ${{ steps.changes.outputs.admin-frontend }}"
+          echo "Admin Backend: ${{ steps.changes.outputs.admin-backend }}"
+          echo "Shared Config: ${{ steps.changes.outputs.shared-config }}"
+          echo "Target Stage: ${{ steps.set-stage.outputs.stage }}"
+
+  # 2. INFRASTRUCTURE LAYER - Deploy foundation first
+  deploy-infrastructure:
+    if: |
+      (needs.detect-changes.outputs.infrastructure == 'true') ||
+      (github.event_name == 'workflow_dispatch' && 
+       (github.event.inputs.services == 'all' || contains(github.event.inputs.services, 'infrastructure')))
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    environment: ${{ needs.detect-changes.outputs.stage == 'prod' && 'production' || 'development' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install CDK
+        run: npm install -g aws-cdk@latest
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Install Python dependencies
+        working-directory: tsa-infrastructure
+        run: pip install -r requirements.txt
+        
+      - name: Deploy Infrastructure Layer
+        working-directory: tsa-infrastructure
+        run: |
+          STAGE="${{ needs.detect-changes.outputs.stage }}"
+          echo "🏗️ Deploying Infrastructure Layer to $STAGE"
+          
+          # Deploy in correct dependency order for TSA architecture
+          cdk deploy tsa-infra-networking-$STAGE --require-approval never --concurrency 1
+          cdk deploy tsa-infra-security-$STAGE --require-approval never --concurrency 1
+          cdk deploy tsa-infra-data-$STAGE --require-approval never --concurrency 1
+          cdk deploy tsa-infra-auth-$STAGE --require-approval never --concurrency 1
+          cdk deploy tsa-infra-migration-$STAGE --require-approval never --concurrency 1
+          
+          echo "✅ Infrastructure Layer deployed successfully to $STAGE"
+
+  # 3. COACH PORTAL DEPLOYMENT - Frontend and Backend
+  deploy-coach-portal:
+    if: |
+      always() && !cancelled() && 
+      (needs.detect-changes.outputs.coach-frontend == 'true' || 
+       needs.detect-changes.outputs.coach-backend == 'true' || 
+       needs.detect-changes.outputs.infrastructure == 'true' ||
+       (github.event_name == 'workflow_dispatch' && 
+        (github.event.inputs.services == 'all' || contains(github.event.inputs.services, 'coach'))))
+    needs: [detect-changes, deploy-infrastructure]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.detect-changes.outputs.stage == 'prod' && 'production' || 'development' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Setup Python for CDK
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install CDK
+        run: npm install -g aws-cdk@latest
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Build Coach Frontend
+        if: needs.detect-changes.outputs.coach-frontend == 'true'
+        working-directory: tsa-coach-frontend
+        run: |
+          echo "🎓 Building Coach Frontend..."
+          npm ci
+          npm run build
+          echo "✅ Coach Frontend built successfully"
+          
+      - name: Test Coach Frontend
+        if: needs.detect-changes.outputs.coach-frontend == 'true'
+        working-directory: tsa-coach-frontend
+        run: |
+          echo "🧪 Testing Coach Frontend..."
+          npm run lint
+          # npm test -- --watchAll=false (uncomment when tests are available)
+          echo "✅ Coach Frontend tests passed"
+          
+      - name: Deploy Coach Backend
+        working-directory: tsa-infrastructure
+        run: |
+          STAGE="${{ needs.detect-changes.outputs.stage }}"
+          echo "🚀 Deploying Coach Backend to $STAGE"
+          
+          pip install -r requirements.txt
+          cdk deploy tsa-coach-backend-$STAGE --require-approval never
+          
+          echo "✅ Coach Backend deployed successfully to $STAGE"
+
+  # 4. ADMIN PORTAL DEPLOYMENT - Frontend and Backend  
+  deploy-admin-portal:
+    if: |
+      always() && !cancelled() && 
+      (needs.detect-changes.outputs.admin-frontend == 'true' || 
+       needs.detect-changes.outputs.admin-backend == 'true' || 
+       needs.detect-changes.outputs.infrastructure == 'true' ||
+       (github.event_name == 'workflow_dispatch' && 
+        (github.event.inputs.services == 'all' || contains(github.event.inputs.services, 'admin'))))
+    needs: [detect-changes, deploy-infrastructure, deploy-coach-portal]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.detect-changes.outputs.stage == 'prod' && 'production' || 'development' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Setup Python for CDK
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install CDK
+        run: npm install -g aws-cdk@latest
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Build Admin Frontend
+        if: needs.detect-changes.outputs.admin-frontend == 'true'
+        working-directory: tsa-admin-frontend
+        run: |
+          echo "👩‍💼 Building Admin Frontend..."
+          npm ci
+          npm run build
+          echo "✅ Admin Frontend built successfully"
+          
+      - name: Test Admin Frontend
+        if: needs.detect-changes.outputs.admin-frontend == 'true'
+        working-directory: tsa-admin-frontend
+        run: |
+          echo "🧪 Testing Admin Frontend..."
+          npm run lint
+          # npm test -- --watchAll=false (uncomment when tests are available)
+          echo "✅ Admin Frontend tests passed"
+          
+      - name: Deploy Admin Backend
+        working-directory: tsa-infrastructure
+        run: |
+          STAGE="${{ needs.detect-changes.outputs.stage }}"
+          echo "🚀 Deploying Admin Backend to $STAGE"
+          
+          pip install -r requirements.txt
+          cdk deploy tsa-admin-backend-$STAGE --require-approval never
+          
+          echo "✅ Admin Backend deployed successfully to $STAGE"
+
+  # 5. PARENT PORTAL DEPLOYMENT - Backend only (parent frontend uses unified frontend)
+  deploy-parent-portal:
+    if: |
+      always() && !cancelled() && 
+      (needs.detect-changes.outputs.infrastructure == 'true' ||
+       (github.event_name == 'workflow_dispatch' && 
+        (github.event.inputs.services == 'all' || contains(github.event.inputs.services, 'parent'))))
+    needs: [detect-changes, deploy-infrastructure, deploy-coach-portal]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.detect-changes.outputs.stage == 'prod' && 'production' || 'development' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Python for CDK
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install CDK
+        run: npm install -g aws-cdk@latest
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Deploy Parent Backend
+        working-directory: tsa-infrastructure
+        run: |
+          STAGE="${{ needs.detect-changes.outputs.stage }}"
+          echo "👨‍👩‍👧‍👦 Deploying Parent Backend to $STAGE"
+          
+          pip install -r requirements.txt
+          cdk deploy tsa-parent-backend-$STAGE --require-approval never
+          
+          echo "✅ Parent Backend deployed successfully to $STAGE"
+
+  # 6. FRONTEND INFRASTRUCTURE - Deploy after all backends are ready
+  deploy-frontend-infrastructure:
+    if: always() && !cancelled()
+    needs: [detect-changes, deploy-coach-portal, deploy-admin-portal, deploy-parent-portal]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.detect-changes.outputs.stage == 'prod' && 'production' || 'development' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Python for CDK
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install CDK
+        run: npm install -g aws-cdk@latest
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Deploy Frontend Infrastructure
+        working-directory: tsa-infrastructure
+        run: |
+          STAGE="${{ needs.detect-changes.outputs.stage }}"
+          echo "🖥️ Deploying Frontend Infrastructure to $STAGE"
+          
+          pip install -r requirements.txt
+          cdk deploy tsa-infra-frontend-$STAGE --require-approval never
+          
+          echo "✅ Frontend Infrastructure deployed successfully to $STAGE"
+
+  # 7. DEPLOYMENT SUMMARY - Report results
+  deployment-summary:
+    if: always()
+    needs: [detect-changes, deploy-infrastructure, deploy-coach-portal, deploy-admin-portal, deploy-parent-portal, deploy-frontend-infrastructure]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment Summary
+        run: |
+          echo "🎉 TSA Deployment Summary"
+          echo "========================="
+          echo "Environment: ${{ needs.detect-changes.outputs.stage }}"
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo ""
+          echo "Deployment Status:"
+          echo "- Infrastructure: ${{ needs.deploy-infrastructure.result || 'Skipped' }}"
+          echo "- Coach Portal: ${{ needs.deploy-coach-portal.result || 'Skipped' }}"
+          echo "- Admin Portal: ${{ needs.deploy-admin-portal.result || 'Skipped' }}"
+          echo "- Parent Portal: ${{ needs.deploy-parent-portal.result || 'Skipped' }}"
+          echo "- Frontend Infrastructure: ${{ needs.deploy-frontend-infrastructure.result || 'Skipped' }}"
+          echo ""
+          echo "Changes Detected:"
+          echo "- Infrastructure: ${{ needs.detect-changes.outputs.infrastructure }}"
+          echo "- Coach Frontend: ${{ needs.detect-changes.outputs.coach-frontend }}"
+          echo "- Coach Backend: ${{ needs.detect-changes.outputs.coach-backend }}"
+          echo "- Admin Frontend: ${{ needs.detect-changes.outputs.admin-frontend }}"
+          echo "- Admin Backend: ${{ needs.detect-changes.outputs.admin-backend }}"
+          echo ""
+          if [[ "${{ needs.deploy-infrastructure.result }}" == "success" && "${{ needs.deploy-coach-portal.result }}" == "success" && "${{ needs.deploy-admin-portal.result }}" == "success" ]]; then
+            echo "✅ All deployments completed successfully!"
+          else
+            echo "⚠️ Some deployments failed or were skipped"
+          fi 

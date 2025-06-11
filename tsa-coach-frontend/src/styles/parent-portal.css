@@ -1,0 +1,198 @@
+/* Parent Portal Specific CSS - Complete Isolation */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Font declarations for parent portal */
+@font-face {
+  font-family: 'Inter';
+  src: url('https://rsms.me/inter/font-files/Inter-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('https://rsms.me/inter/font-files/Inter-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('https://rsms.me/inter/font-files/Inter-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('https://rsms.me/inter/font-files/Inter-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Parent Portal Theme Variables */
+:root {
+  --parent-radius: 0.75rem;
+  --parent-background: #f8fafc;
+  --parent-foreground: #1e293b;
+  --parent-card: #ffffff;
+  --parent-card-foreground: #1e293b;
+  --parent-primary: #2563eb;
+  --parent-primary-foreground: #ffffff;
+  --parent-secondary: #f1f5f9;
+  --parent-secondary-foreground: #475569;
+  --parent-muted: #f1f5f9;
+  --parent-muted-foreground: #64748b;
+  --parent-accent: #f1f5f9;
+  --parent-accent-foreground: #1e293b;
+  --parent-border: #e2e8f0;
+  --parent-input: #e2e8f0;
+  --parent-ring: #2563eb;
+  --parent-sidebar: #0f172a;
+  --parent-sidebar-foreground: #f1f5f9;
+  --parent-sidebar-border: #334155;
+}
+
+/* Override Tailwind base layer to remove problematic global styles */
+@layer base {
+  /* Parent Portal Base Styles - NO GLOBAL BORDER/OUTLINE */
+  .parent-portal-root {
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    background-color: var(--parent-background);
+    color: var(--parent-foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .parent-portal-root *,
+  .parent-portal-root *::before,
+  .parent-portal-root *::after {
+    box-sizing: border-box;
+    border: 0 solid transparent; /* Reset borders to transparent */
+    outline: none; /* Remove all outlines by default */
+  }
+
+  /* Only add borders where explicitly needed */
+  .parent-portal-root .border {
+    border-width: 1px;
+  }
+
+  .parent-portal-root .border-gray-200 {
+    border-color: #e5e7eb;
+  }
+
+  .parent-portal-root .border-slate-700\/50 {
+    border-color: rgb(51 65 85 / 0.5);
+  }
+
+  .parent-portal-root .ring-2 {
+    box-shadow: 0 0 0 2px var(--parent-ring);
+  }
+}
+
+@layer components {
+  /* Premium parent portal button styles */
+  .parent-portal-root .btn-premium {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    transition: all 0.2s ease-in-out;
+    border: none;
+    cursor: pointer;
+  }
+
+  .parent-portal-root .btn-premium:focus {
+    outline: 2px solid var(--parent-ring);
+    outline-offset: 2px;
+  }
+
+  .parent-portal-root .btn-blue {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    color: white;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  .parent-portal-root .btn-blue:hover {
+    background: linear-gradient(135deg, #2563eb, #1e40af);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    transform: translateY(-1px);
+  }
+
+  .parent-portal-root .btn-emerald {
+    background: linear-gradient(135deg, #10b981, #047857);
+    color: white;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  .parent-portal-root .btn-emerald:hover {
+    background: linear-gradient(135deg, #059669, #065f46);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    transform: translateY(-1px);
+  }
+
+  .parent-portal-root .btn-purple {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    color: white;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  .parent-portal-root .btn-purple:hover {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    transform: translateY(-1px);
+  }
+
+  .parent-portal-root .btn-orange {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: white;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  .parent-portal-root .btn-orange:hover {
+    background: linear-gradient(135deg, #ea580c, #dc2626);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    transform: translateY(-1px);
+  }
+
+  /* Card styles */
+  .parent-portal-root .card {
+    background: var(--parent-card);
+    border: 1px solid var(--parent-border);
+    border-radius: var(--parent-radius);
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+
+  /* Sidebar styles */
+  .parent-portal-root .sidebar {
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    color: var(--parent-sidebar-foreground);
+    border-right: 1px solid var(--parent-sidebar-border);
+  }
+}
+
+@layer utilities {
+  /* Remove any Headless UI default styles that might interfere */
+  .parent-portal-root [data-headlessui-state] {
+    border: none !important;
+    outline: none !important;
+  }
+
+  .parent-portal-root [data-headlessui-state]:focus {
+    outline: 2px solid var(--parent-ring) !important;
+    outline-offset: 2px !important;
+  }
+} 

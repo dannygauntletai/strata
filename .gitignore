@@ -1,0 +1,606 @@
+# ===================================================================
+# TSA Monorepo - Master .gitignore
+# Covers all services: Next.js, React, Python CDK, AWS Lambda
+# ===================================================================
+
+# ===================================================================
+# NODE.JS & NPM (Coach Frontend, Admin Frontend)
+# ===================================================================
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+package-lock.json
+yarn.lock
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# NYC test coverage
+.nyc_output
+
+# Grunt intermediate storage
+.grunt
+
+# Bower dependency directory
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons
+build/Release
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# ===================================================================
+# NEXT.JS SPECIFIC (Coach Frontend)
+# ===================================================================
+
+# Next.js build output
+.next/
+.next/*
+out/
+
+# Next.js cache
+.next/cache/
+
+# Vercel deployment artifacts
+.vercel
+
+# ===================================================================
+# REACT/VITE SPECIFIC (Admin Frontend)
+# ===================================================================
+
+# Vite build output
+dist/
+dist-ssr/
+
+# Vite cache
+.vite/
+
+# Build artifacts
+build/
+
+# ===================================================================
+# PYTHON & CDK (Infrastructure, Lambda Functions)
+# ===================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# pyenv
+.python-version
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.envrc
+
+# All .env files (for security)
+.env*
+!.env.example
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ===================================================================
+# AWS CDK SPECIFIC (Infrastructure)
+# ===================================================================
+
+# CDK asset staging directory
+.cdk.staging/
+cdk.out/
+cdk.context.json
+
+# CDK bootstrap template
+bootstrap-template.yaml
+
+# CDK metadata
+cdk.json.backup
+
+# CloudFormation templates (CDK generated - can be regenerated)
+# *.template.json    # TOO BROAD - might hide important templates
+# *.template.yaml    # TOO BROAD - might hide important templates
+
+# CDK generated templates (specific paths)
+cdk.out/*.template.json
+cdk.out/*.template.yaml
+
+# ===================================================================
+# AWS LAMBDA SPECIFIC (Backend Services)
+# ===================================================================
+
+# Lambda deployment packages (be specific)
+# *.zip  # Commented out above - too broad
+lambda-package.zip
+deployment-package.zip
+
+# Lambda layers  
+layers/
+layer.zip
+
+# SAM build artifacts
+.aws-sam/
+
+# CDK deployment artifacts (generated)
+cdk.out/*.zip
+
+# ===================================================================
+# ENVIRONMENT & SECRETS
+# ===================================================================
+
+# Credentials and API keys
+.credentials/
+*.credentials
+api-keys/
+
+# AWS credentials (should never be committed)
+.aws/
+aws-credentials
+credentials
+
+# Secrets
+secret*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Configuration files with sensitive data
+config/production.json
+config/staging.json
+
+# ===================================================================
+# IDE & EDITOR FILES
+# ===================================================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# Cursor
+.cursor/
+
+# JetBrains IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ===================================================================
+# OPERATING SYSTEM FILES
+# ===================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ===================================================================
+# LARGE FILES & MEDIA (Prevent accidental commits)
+# ===================================================================
+
+# Videos
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+*.mkv
+*.m4v
+*.3gp
+
+# Images (large)
+*.psd
+*.ai
+*.eps
+*.svg.bak
+*.tiff
+*.tif
+
+# Audio
+*.wav
+*.mp3
+*.aac
+*.ogg
+*.wma
+*.m4a
+*.flac
+
+# Archives (be more specific about zip files)
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.gz
+*.bz2
+*.xz
+*.7z
+*.rar
+# *.zip    # TOO BROAD - might hide deployment artifacts
+*.dmg
+*.iso
+
+# Large zip files (specific patterns)
+*-data.zip
+*-backup.zip
+*-archive.zip
+node_modules.zip
+build.zip
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+*.accdb
+
+# Large data files
+*.csv
+*.xml
+*.log
+*.logs
+
+# Backup files (specific patterns to avoid hiding important ones)
+# *.bak      # TOO BROAD - might hide important backups  
+# *.backup   # TOO BROAD - might hide important backups
+# *.old      # TOO BROAD - might hide important config backups
+# *.orig     # TOO BROAD - might hide important merge files
+# *.save     # TOO BROAD
+
+# Large backup files (specific patterns)
+*-backup.tar
+*-backup.tar.gz
+*.sql.bak
+*.dump.old
+temp-backup.*
+*~backup
+
+# Large JSON data files (specific patterns)
+data.json
+dataset*.json
+*-data.json
+*-dataset.json
+*.min.json
+bundle*.json
+
+# Large processed data files
+**/real-estate-processed.json
+**/public/*-processed.json
+
+# Generated/processed image directories  
+**/public/images/real-estate/
+
+# ===================================================================
+# BUILD ARTIFACTS & GENERATED FILES
+# ===================================================================
+
+# Compiled output
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Generated documentation
+docs/_build/
+docs/build/
+site/
+
+# Test artifacts
+test-results/
+test-reports/
+screenshots/
+videos/
+
+# ===================================================================
+# DOCKER & CONTAINERS
+# ===================================================================
+
+# Docker
+Dockerfile.local
+docker-compose.override.yml
+.dockerignore.local
+
+# Container data
+.container-data/
+
+# ===================================================================
+# TERRAFORM & OTHER IaC (if used alongside CDK)
+# ===================================================================
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+terraform.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# ===================================================================
+# CI/CD & DEPLOYMENT
+# ===================================================================
+
+# GitHub Actions artifacts
+.github/workflows/temp/
+
+# Deployment artifacts
+deploy/
+deployment/
+release/
+
+# ===================================================================
+# MONITORING & ANALYTICS
+# ===================================================================
+
+# Sentry
+.sentryclirc
+
+# Bundle analyzer
+bundle-analyzer-report.html
+webpack-bundle-analyzer/
+
+# ===================================================================
+# CUSTOM TSA SPECIFIC
+# ===================================================================
+
+# Marketing materials (large files)
+marketing-assets/
+*.indd
+*.sketch
+
+# User uploads (if stored locally during development)
+uploads/
+user-content/
+
+# Generated certificates
+certificates/
+
+# Local development overrides
+local.config.js
+local.settings.json
+
+# Performance reports
+performance-reports/
+
+# ===================================================================
+# MISC
+# ===================================================================
+
+# Cache directories
+.cache/
+.parcel-cache/
+.sass-cache/
+
+# Editor directories and files
+.history/
+
+# Local history
+.local-history/
+
+# Temporary folders
+temp*/
+tmp*/
+
+# OS generated files
+**/Icon?
+
+# ===================================================================
+# END TSA MONOREPO .gitignore
+# ===================================================================
+
+# Lambda layers and Python packages (can be large)
+**/lambda_migrations/migration_layer/python/
+**/shared_layer/python/*
+**/layer/python/
+**/python/lib/
+
+# Lambda deployment artifacts
+*.zip
+lambda.zip
+*.tar.gz
+
+# Generated configuration files (may contain sensitive data)
+**/generated-config.json
+**/config/generated-*.json
+
+# Backup files
+*.backup
+*.bak
+*.orig
+
+# AWS CDK build artifacts
+**/cdk.out/
+cdk.context.json
+
+# Large processed data files and images
+**/real-estate-processed.json
+**/public/*-processed.json
+**/public/images/real-estate/ 
