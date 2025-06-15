@@ -12,7 +12,7 @@
 ```
 BEFORE:                          AFTER:
 tsa/                            tsa-monorepo/
-├── tsa-coach-frontend/         ├── services/
+├── tsa-platform-frontend/         ├── services/
 ├── tsa-coach-backend/          │   ├── coach-frontend/     (git submodule)
 ├── tsa-admin-frontend/         │   ├── coach-backend/      (git submodule)
 ├── tsa-admin-backend/          │   ├── admin-frontend/     (git submodule)
@@ -37,7 +37,7 @@ mkdir tsa-monorepo && cd tsa-monorepo
 git init
 
 # 2. Add each service as git submodule
-git submodule add ../tsa/tsa-coach-frontend services/coach-frontend
+git submodule add ../tsa/tsa-platform-frontend services/coach-frontend
 git submodule add ../tsa/tsa-coach-backend services/coach-backend
 git submodule add ../tsa/tsa-admin-frontend services/admin-frontend
 git submodule add ../tsa/tsa-admin-backend services/admin-backend
@@ -112,7 +112,7 @@ yarn init -w  # Initialize workspaces
 
 ### Implementation:
 ```bash
-git subtree add --prefix=services/coach-frontend ../tsa/tsa-coach-frontend main
+git subtree add --prefix=services/coach-frontend ../tsa/tsa-platform-frontend main
 git subtree add --prefix=services/coach-backend ../tsa/tsa-coach-backend main
 git subtree add --prefix=services/admin-frontend ../tsa/tsa-admin-frontend main
 git subtree add --prefix=services/admin-backend ../tsa/tsa-admin-backend main

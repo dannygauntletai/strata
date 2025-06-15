@@ -36,7 +36,7 @@ new llc_incorporation_stack_1.LlcIncorporationStack(app, `TsaLlcIncorporation-${
     // Environment configuration
     env: {
         account: process.env.CDK_DEFAULT_ACCOUNT,
-        region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
+        region: process.env.CDK_DEFAULT_REGION || 'us-east-2',
     },
     // Stack description
     description: `LLC Incorporation Docker Lambda Stack for ${stage} environment`,

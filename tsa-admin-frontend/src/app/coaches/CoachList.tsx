@@ -18,12 +18,8 @@ interface Coach {
 // Define the props for the new component
 interface CoachListProps {
   coaches: Coach[];
-  selectedCoaches: number[];
-  handleSelectAll: () => void;
-  handleSelectCoach: (id: number) => void;
   handleDeleteCoach: (id: number) => void;
-  searchTerm: string;
-  setSearchTerm: (term: string) => void;
+  handleEditCoach: (coach: Coach) => void;
 }
 
 // Move helper functions into this component file
@@ -55,28 +51,16 @@ const formatDate = (dateString: string) => {
 
 const CoachList: React.FC<CoachListProps> = ({
   coaches,
-  selectedCoaches,
-  handleSelectAll,
-  handleSelectCoach,
   handleDeleteCoach,
-  searchTerm,
-  setSearchTerm,
+  handleEditCoach,
 }) => {
   return (
     <div>
       {coaches.length === 0 && (
         <div className="p-6 text-center">
           <div className="text-gray-400 mb-2">
-            {searchTerm ? 'No coaches found matching your search' : 'No coaches found'}
+            No coaches found
           </div>
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="text-blue-600 hover:text-blue-800"
-            >
-              Clear search
-            </button>
-          )}
         </div>
       )}
 
@@ -88,14 +72,6 @@ const CoachList: React.FC<CoachListProps> = ({
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    <input
-                      type="checkbox"
-                      checked={selectedCoaches.length === coaches.length && coaches.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded border-gray-300"
-                    />
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Coach
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -103,9 +79,6 @@ const CoachList: React.FC<CoachListProps> = ({
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Onboarding
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -116,28 +89,20 @@ const CoachList: React.FC<CoachListProps> = ({
                 {coaches.map((coach) => (
                   <tr key={coach.coach_id} className="hover:bg-gray-50">
                     <td className="px-4 py-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedCoaches.includes(coach.coach_id)}
-                        onChange={() => handleSelectCoach(coach.coach_id)}
-                        className="rounded border-gray-300"
-                      />
-                    </td>
-                    <td className="px-4 py-4">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
                           {getDisplayName(coach)}
                         </div>
                         <div className="text-sm text-gray-500">{coach.email || 'No email'}</div>
                         {coach.sport && (
-                          <div className="text-sm text-gray-500">{coach.sport}</div>
+                          <div key={`sport-${coach.coach_id}`} className="text-sm text-gray-500">{coach.sport}</div>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-4">
                       <div className="text-sm text-gray-900">{coach.school_name || 'No school'}</div>
                       {coach.school_type && (
-                        <div className="text-sm text-gray-500 capitalize">
+                        <div key={`school-type-${coach.coach_id}`} className="text-sm text-gray-500 capitalize">
                           {coach.school_type.replace(/\b\w/g, l => l.toUpperCase())}
                         </div>
                       )}
@@ -149,23 +114,20 @@ const CoachList: React.FC<CoachListProps> = ({
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      {coach.onboarding_completed ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          ✓ Complete
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                          ⏳ Pending
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleEditCoach(coach)}
+                          className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                        >
+                          Edit
+                        </button>
                       <button
                         onClick={() => handleDeleteCoach(coach.coach_id)}
                         className="text-red-600 hover:text-red-900 text-sm font-medium"
                       >
                         Delete
                       </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -179,12 +141,6 @@ const CoachList: React.FC<CoachListProps> = ({
               <div key={coach.coach_id} className="bg-white border rounded-lg p-4 shadow-sm">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedCoaches.includes(coach.coach_id)}
-                      onChange={() => handleSelectCoach(coach.coach_id)}
-                      className="rounded border-gray-300"
-                    />
                     <div>
                       <div className="text-sm font-medium text-gray-900">
                         {getDisplayName(coach)}
@@ -192,12 +148,20 @@ const CoachList: React.FC<CoachListProps> = ({
                       <div className="text-sm text-gray-500">{coach.email || 'No email'}</div>
                     </div>
                   </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleEditCoach(coach)}
+                      className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                    >
+                      Edit
+                    </button>
                   <button
                     onClick={() => handleDeleteCoach(coach.coach_id)}
                     className="text-red-600 hover:text-red-900 text-sm font-medium"
                   >
                     Delete
                   </button>
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -205,7 +169,7 @@ const CoachList: React.FC<CoachListProps> = ({
                     <div className="text-xs font-medium text-gray-500">School</div>
                     <div className="text-sm text-gray-900">{coach.school_name || 'No school'}</div>
                     {coach.school_type && (
-                      <div className="text-xs text-gray-500 capitalize">
+                      <div key={`mobile-school-type-${coach.coach_id}`} className="text-xs text-gray-500 capitalize">
                         {coach.school_type.replace(/\b\w/g, l => l.toUpperCase())}
                       </div>
                     )}
@@ -222,22 +186,13 @@ const CoachList: React.FC<CoachListProps> = ({
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(coach.status || 'unknown')}`}>
                     {coach.status || 'unknown'}
                   </span>
-                  {coach.onboarding_completed ? (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      ✓ Complete
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                      ⏳ Pending
-                    </span>
-                  )}
                 </div>
                 
                 {(coach.sport || coach.created_at) && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div key={`mobile-details-${coach.coach_id}`} className="mt-3 pt-3 border-t border-gray-100">
                     <div className="flex justify-between text-xs text-gray-500">
-                      {coach.sport && <span>Sport: {coach.sport}</span>}
-                      {coach.created_at && <span>Joined: {formatDate(coach.created_at)}</span>}
+                      {coach.sport && <span key={`mobile-sport-${coach.coach_id}`}>Sport: {coach.sport}</span>}
+                      {coach.created_at && <span key={`mobile-joined-${coach.coach_id}`}>Joined: {formatDate(coach.created_at)}</span>}
                     </div>
                   </div>
                 )}

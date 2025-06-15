@@ -1,0 +1,59 @@
+{
+  "tsa-infra-networking-dev": {
+    "ExportsOutputRefTsaUnifiedPlatformVPCPrivateSubnet1Subnet18780D40CFF341EE": "subnet-0d518c56a38cc1ff3",
+    "ExportsOutputRefTsaUnifiedPlatformVPCDatabaseSubnet1Subnet90078AB3D93DFB88": "subnet-04c0dba37072106c6",
+    "ExportsOutputRefTsaUnifiedPlatformVPCDatabaseSubnet2Subnet0B8A106F58EA45A0": "subnet-01cbf53918131aa37",
+    "VpcId": "vpc-0c1f0de85ce819164",
+    "ExportsOutputFnGetAttUnifiedPlatformLambdaSGE96E9657GroupIdA152AC5B": "sg-0a0e14077617e4a73",
+    "ExportsOutputRefTsaUnifiedPlatformVPCB59A8695D3D43A55": "vpc-0c1f0de85ce819164",
+    "ExportsOutputFnGetAttUnifiedPlatformDatabaseSG3143326CGroupIdDAAFD56C": "sg-0bacd8704580db163",
+    "ExportsOutputRefTsaUnifiedPlatformVPCPrivateSubnet2SubnetC42C6742A007B8D1": "subnet-0df6cab565976d719",
+    "DatabaseSecurityGroupId": "sg-0bacd8704580db163",
+    "LambdaSecurityGroupId": "sg-0a0e14077617e4a73"
+  },
+  "tsa-infra-security-dev": {
+    "UserPoolClientId": "6i8hhb8llt6rhlei398e90ennl",
+    "UserPoolId": "us-east-2_IB6RRg7NX",
+    "ExportsOutputFnGetAttUnifiedPlatformUserPool95250878ArnF8378A1E": "arn:aws:cognito-idp:us-east-2:164722634547:userpool/us-east-2_IB6RRg7NX",
+    "ExportsOutputRefUnifiedPlatformUserPool95250878BAE19627": "us-east-2_IB6RRg7NX",
+    "LambdaRoleArn": "arn:aws:iam::164722634547:role/tsa-unified-platform-lambda-role-dev",
+    "ExportsOutputRefUnifiedPlatformUserPoolUnifiedPlatformClient1DE78D1A2D28A108": "6i8hhb8llt6rhlei398e90ennl"
+  },
+  "tsa-infra-data-dev": {
+    "EnrollmentsTableName": "enrollments-dev",
+    "UnifiedPlatformBucketName": "tsa-unified-platform-assets-dev-164722634547",
+    "KMSKeyId": "38055c2a-514f-427b-98b7-6e0e7b237ecb",
+    "UsersTableName": "users-dev",
+    "ExportsOutputFnGetAttUnifiedPlatformDatabase0624511CEndpointAddressA290300B": "tsa-unified-platform-dev.cticgi220ojj.us-east-2.rds.amazonaws.com",
+    "EventsTableName": "events-dev",
+    "InvitationsTableName": "invitations-dev",
+    "ProfilesTableName": "profiles-dev",
+    "DocumentsTableName": "documents-dev",
+    "DatabaseSecretArn": "arn:aws:secretsmanager:us-east-2:164722634547:secret:tsa/database-dev-bqRyem",
+    "ExportsOutputRefDatabaseSecretAttachment9A63A3D478416D8E": "arn:aws:secretsmanager:us-east-2:164722634547:secret:tsa/database-dev-bqRyem",
+    "DatabaseEndpoint": "tsa-unified-platform-dev.cticgi220ojj.us-east-2.rds.amazonaws.com",
+    "EventsPhotosBucketName": "tsa-events-photos-storage-dev-164722634547"
+  },
+  "tsa-infra-auth-dev": {
+    "UserPoolClientId": "321383iq19q7lnatikellmfgsr",
+    "UserPoolId": "us-east-2_QGi1JHPFU",
+    "PasswordlessApiUrl": "https://s4h51pa94g.execute-api.us-east-2.amazonaws.com/v1/",
+    "ExportsOutputRefPasswordlessAPI1E2C09CE082AD293": "s4h51pa94g",
+    "ExportsOutputRefPasswordlessAPIDeploymentStagev1F2978071648FD587": "v1",
+    "PasswordlessAPIEndpointDC931873": "https://s4h51pa94g.execute-api.us-east-2.amazonaws.com/v1/",
+    "UserPoolArn": "arn:aws:cognito-idp:us-east-2:164722634547:userpool/us-east-2_QGi1JHPFU",
+    "UserPoolDomainUrl": "https://tsa-unified-v1-dev.auth.us-east-2.amazoncognito.com"
+  },
+  "tsa-admin-backend-dev": {
+    "ExportsOutputRefAdminPortalServiceAdminPortalAPIDeploymentStageprodB7D4570B43FF046E": "prod",
+    "AdminPortalServiceDocumentsTableNameBA7A158F": "documents-v1-dev",
+    "AdminPortalServiceInvitationsTableName9FB36F06": "invitations-v1-dev",
+    "AdminPortalServiceEventsTableNameBD073FC1": "events-v1-dev",
+    "AdminPortalServiceUsersTableName0E71FFC7": "users-v1-dev",
+    "AdminPortalServiceEnrollmentsTableNameA3B14A1F": "enrollments-v1-dev",
+    "AdminPortalServiceAdminAPIUrl0F5A86A4": "https://xjw83vkgc4.execute-api.us-east-2.amazonaws.com/prod/",
+    "AdminPortalServiceAdminPortalAPIEndpointCD77C31D": "https://xjw83vkgc4.execute-api.us-east-2.amazonaws.com/prod/",
+    "AdminPortalServiceAuditLogsTableName87D3E7E8": "audit-logs-v1-dev",
+    "ExportsOutputRefAdminPortalServiceAdminPortalAPI1F0D73691D72847A": "xjw83vkgc4"
+  }
+}

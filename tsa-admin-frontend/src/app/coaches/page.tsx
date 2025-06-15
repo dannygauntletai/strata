@@ -1,24 +1,26 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { adminAPI } from '@/lib/auth'
+import { adminAPI, adminAuth } from '@/lib/auth'
 import React from 'react'
+import CoachList from './CoachList'
+import EditCoachModal from './EditCoachModal'
 
 interface Coach {
-  coach_id: string;
-  email: string;
-  name?: string;
-  first_name?: string;
-  last_name?: string;
-  school_name: string;
-  school_type?: string;
-  sport?: string;
-  role: string;
-  status: 'active' | 'inactive' | 'pending' | 'suspended';
+  coach_id: number;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  sport: string | null;
+  school_name: string | null;
+  school_type: string | null;
+  role: string | null;
+  status: string | null;
+  onboarding_completed: boolean;
   created_at: string;
+  name?: string;
   last_login?: string;
   invitation_id?: string;
-  onboarding_completed: boolean;
   profile_completed?: boolean;
 }
 
@@ -26,12 +28,14 @@ export default function CoachesPage() {
   const [coaches, setCoaches] = useState<Coach[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<string>('all')
-  const [searchTerm, setSearchTerm] = useState('')
+  const [filter, setFilter] = useState('all')
+  
+  // Modal states
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [coachToDelete, setCoachToDelete] = useState<string | null>(null)
-  const [selectedCoaches, setSelectedCoaches] = useState<string[]>([])
-  const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [coachToDelete, setCoachToDelete] = useState<number | null>(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [coachToEdit, setCoachToEdit] = useState<Coach | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
 
   const fetchCoaches = async () => {
     try {
@@ -51,7 +55,12 @@ export default function CoachesPage() {
     }
   }
 
-  const handleDeleteCoach = (coachId: string) => {
+  const handleDeleteCoach = (coachId: number) => {
+    console.log('🎯 Delete coach button clicked:', {
+      coachId,
+      coachIdType: typeof coachId,
+      coachDetails: coaches.find(c => c.coach_id === coachId)
+    })
     setCoachToDelete(coachId)
     setDeleteModalOpen(true)
   }
@@ -59,58 +68,97 @@ export default function CoachesPage() {
   const confirmDeleteCoach = async () => {
     if (!coachToDelete) return
 
+    console.log('🗑️ Starting coach deletion process:', {
+      coachId: coachToDelete,
+      coachIdType: typeof coachToDelete,
+      coachIdString: coachToDelete.toString()
+    })
+
     try {
-      await adminAPI.deleteCoach(coachToDelete)
-      // Remove coach from local state
-      setCoaches(coaches.filter(coach => coach.coach_id !== coachToDelete))
-      // Also remove from selected if it was selected
-      setSelectedCoaches(selectedCoaches.filter(id => id !== coachToDelete))
+      console.log('📡 Calling adminAPI.deleteCoach with ID:', coachToDelete.toString())
+      const result = await adminAPI.deleteCoach(coachToDelete.toString())
+      console.log('✅ Delete API call successful:', result)
+      
+      // Update coach status to inactive instead of removing from array
+      const coachCountBefore = coaches.length
+      setCoaches(coaches.map(coach => 
+        coach.coach_id === coachToDelete 
+          ? { ...coach, status: 'inactive' }
+          : coach
+      ))
+      console.log('🔄 Updated coach status to inactive:', {
+        coachCountBefore,
+        coachCountAfter: coachCountBefore, // Same count since we're not removing
+        updatedCoachId: coachToDelete
+      })
+      
       setDeleteModalOpen(false)
       setCoachToDelete(null)
+      
+      console.log('🎉 Coach deletion completed successfully')
     } catch (err) {
-      console.error('Failed to delete coach:', err)
+      console.error('❌ Failed to delete coach:', {
+        error: err,
+        coachId: coachToDelete,
+        errorMessage: err instanceof Error ? err.message : 'Unknown error',
+        errorType: err instanceof Error ? err.constructor.name : typeof err
+      })
       setError(err instanceof Error ? err.message : 'Failed to delete coach')
     }
   }
 
-  // Bulk actions
-  const handleSelectAll = () => {
-    const coachIds = filteredCoaches.map(coach => coach.coach_id)
-    
-    if (selectedCoaches.length === coachIds.length) {
-      setSelectedCoaches([])
-    } else {
-      setSelectedCoaches(coachIds)
-    }
+  const handleEditCoach = (coach: Coach) => {
+    console.log('🎯 Edit coach button clicked:', {
+      coachId: coach.coach_id,
+      coachDetails: coach
+    })
+    setCoachToEdit(coach)
+    setEditModalOpen(true)
   }
 
-  const handleSelectCoach = (coachId: string) => {
-    setSelectedCoaches(prev => 
-      prev.includes(coachId)
-        ? prev.filter(id => id !== coachId)
-        : [...prev, coachId]
-    )
-  }
+  const confirmEditCoach = async (updatedCoach: Partial<Coach>) => {
+    if (!coachToEdit) return
 
-  const handleBulkDelete = async () => {
-    if (selectedCoaches.length === 0) return
-    
-    if (!confirm(`Are you sure you want to permanently delete ${selectedCoaches.length} coach(es)? This action cannot be undone.`)) return
-    
-    setBulkActionLoading(true)
+    console.log('✏️ Starting coach edit process:', {
+      coachId: coachToEdit.coach_id,
+      updatedData: updatedCoach
+    })
+
+    setEditLoading(true)
     try {
-      await Promise.all(
-        selectedCoaches.map(id => adminAPI.deleteCoach(id))
-      )
-      // Remove deleted coaches from local state
-      setCoaches(coaches.filter(coach => !selectedCoaches.includes(coach.coach_id)))
-      setSelectedCoaches([])
-      alert(`${selectedCoaches.length} coach(es) deleted successfully`)
+      console.log('📡 Calling adminAPI.updateCoach with ID:', coachToEdit.coach_id.toString())
+      const result = await adminAPI.updateCoach(coachToEdit.coach_id.toString(), {
+        first_name: updatedCoach.first_name || undefined,
+        last_name: updatedCoach.last_name || undefined,
+        email: updatedCoach.email || undefined,
+        sport: updatedCoach.sport || undefined,
+        school_name: updatedCoach.school_name || undefined,
+        school_type: updatedCoach.school_type || undefined,
+        role: updatedCoach.role || undefined,
+        status: updatedCoach.status || undefined
+      })
+      console.log('✅ Update API call successful:', result)
+      
+      // Update coach in local state
+      setCoaches(coaches.map(coach => 
+        coach.coach_id === coachToEdit.coach_id 
+          ? { ...coach, ...updatedCoach }
+          : coach
+      ))
+      
+      setEditModalOpen(false)
+      setCoachToEdit(null)
+      
+      console.log('🎉 Coach update completed successfully')
     } catch (err) {
-      console.error('Failed to delete coaches:', err)
-      alert('Some coaches could not be deleted. Please try again.')
+      console.error('❌ Failed to update coach:', {
+        error: err,
+        coachId: coachToEdit.coach_id,
+        errorMessage: err instanceof Error ? err.message : 'Unknown error'
+      })
+      setError(err instanceof Error ? err.message : 'Failed to update coach')
     } finally {
-      setBulkActionLoading(false)
+      setEditLoading(false)
     }
   }
 
@@ -119,20 +167,10 @@ export default function CoachesPage() {
   }, [])
 
   const filteredCoaches = coaches.filter(coach => {
-    // Status filter
-    if (filter !== 'all' && (coach.status || 'unknown') !== filter) return false
+    const status = coach.status || 'unknown'
     
-    // Search filter
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase()
-      const name = coach.name || coach.first_name || coach.last_name || coach.email || ''
-      const email = (coach.email || '').toLowerCase()
-      const school = (coach.school_name || '').toLowerCase()
-      
-      return name.toLowerCase().includes(searchLower) || 
-             email.includes(searchLower) || 
-             school.includes(searchLower)
-    }
+    // Apply status filter (if not 'all')
+    if (filter !== 'all' && status !== filter) return false
     
     return true
   })
@@ -182,262 +220,156 @@ export default function CoachesPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Coach Management</h1>
-        <p className="mt-2 text-gray-600">
-          View and manage registered coaches across all schools
-        </p>
+    <>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Coach Management</h1>
+          <p className="mt-2 text-gray-600">
+            View and manage registered coaches across all schools
+          </p>
+        </div>
+          
+        {/* Single Tab System */}
+        <div className="border-b border-gray-200 mb-8">
+          <nav className="-mb-px flex space-x-8">
+            {[
+              { key: 'all', label: 'All Coaches', count: coaches.length },
+              { key: 'active', label: 'Active', count: coaches.filter(c => c.status === 'active').length },
+              { key: 'pending', label: 'Pending', count: coaches.filter(c => c.status === 'pending').length },
+              { key: 'inactive', label: 'Inactive', count: coaches.filter(c => c.status === 'inactive').length },
+              { key: 'suspended', label: 'Suspended', count: coaches.filter(c => c.status === 'suspended').length },
+              { key: 'unknown', label: 'Unknown', count: coaches.filter(c => (c.status || 'unknown') === 'unknown').length }
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
+                  filter === tab.key
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tab.label} ({tab.count})
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Coach List Component */}
+        <CoachList
+          coaches={filteredCoaches}
+          handleDeleteCoach={handleDeleteCoach}
+          handleEditCoach={handleEditCoach}
+        />
+
+        {/* Summary Cards */}
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">School Distribution</h3>
+            <div className="space-y-2">
+              {Array.from(new Set(coaches.filter(c => c.school_name).map(c => c.school_name)))
+                .sort()
+                .slice(0, 10)
+                .map(school => {
+                  const count = coaches.filter(c => c.school_name === school).length
+                  return (
+                    <div key={`school-${school}`} className="flex justify-between items-center">
+                      <span className="text-sm text-gray-900">{school}</span>
+                      <span className="text-sm text-gray-500">{count} coach{count !== 1 ? 'es' : ''}</span>
+                    </div>
+                  )
+                })}
+              {Array.from(new Set(coaches.filter(c => c.school_name).map(c => c.school_name))).length > 10 && (
+                <div key="more-schools" className="text-sm text-gray-500 text-center pt-2">
+                  ...and {Array.from(new Set(coaches.filter(c => c.school_name).map(c => c.school_name))).length - 10} more schools
+                </div>
+              )}
+              {coaches.filter(c => !c.school_name).length > 0 && (
+                <div key="no-school" className="flex justify-between items-center">
+                  <span className="text-sm text-gray-900">No school specified</span>
+                  <span className="text-sm text-gray-500">{coaches.filter(c => !c.school_name).length} coach{coaches.filter(c => !c.school_name).length !== 1 ? 'es' : ''}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Sport Distribution</h3>
+            <div className="space-y-2">
+              {Array.from(new Set(coaches.filter(c => c.sport).map(c => c.sport)))
+                .sort()
+                .map(sport => {
+                  const count = coaches.filter(c => c.sport === sport).length
+                  return (
+                    <div key={`sport-${sport}`} className="flex justify-between items-center">
+                      <span className="text-sm text-gray-900 capitalize">{sport}</span>
+                      <span className="text-sm text-gray-500">{count} coach{count !== 1 ? 'es' : ''}</span>
+                    </div>
+                  )
+                })}
+              {coaches.filter(c => !c.sport).length > 0 && (
+                <div key="no-sport" className="flex justify-between items-center">
+                  <span className="text-sm text-gray-900">Not specified</span>
+                  <span className="text-sm text-gray-500">{coaches.filter(c => !c.sport).length} coach{coaches.filter(c => !c.sport).length !== 1 ? 'es' : ''}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="text-sm font-medium text-gray-500">Total Coaches</div>
-          <div className="text-3xl font-bold text-gray-900">
-            {coaches.length}
-          </div>
-          <div className="text-sm text-green-600">
-            {coaches.filter(c => c.status === 'active').length} active
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="text-sm font-medium text-gray-500">Active Coaches</div>
-          <div className="text-3xl font-bold text-green-600">
-            {coaches.filter(c => c.status === 'active').length}
-          </div>
-          <div className="text-sm text-gray-500">
-            {coaches.length > 0 ? Math.round((coaches.filter(c => c.status === 'active').length / coaches.length) * 100) : 0}% of total
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="text-sm font-medium text-gray-500">Onboarding Completed</div>
-          <div className="text-3xl font-bold text-blue-600">
-            {coaches.filter(c => c.onboarding_completed === true).length}
-          </div>
-          <div className="text-sm text-gray-500">
-            {coaches.length > 0 ? Math.round((coaches.filter(c => c.onboarding_completed === true).length / coaches.length) * 100) : 0}% completion rate
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="text-sm font-medium text-gray-500">Pending Setup</div>
-          <div className="text-3xl font-bold text-yellow-600">
-            {coaches.filter(c => c.onboarding_completed !== true).length}
-          </div>
-          <div className="text-sm text-gray-500">
-            Need attention
-          </div>
-        </div>
-      </div>
-
-      {/* Filters and Search */}
-      <div className="bg-white rounded-lg shadow mb-8">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-            <div className="flex items-center space-x-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Filter by status:</label>
-                <select
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  className="ml-2 border border-gray-300 rounded-md px-3 py-1 text-sm"
-                >
-                  <option value="all">All Coaches</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="pending">Pending</option>
-                  <option value="suspended">Suspended</option>
-                  <option value="unknown">Unknown Status</option>
-                </select>
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3 text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
               </div>
-            </div>
-            
-            <div className="flex-1 max-w-md">
-              <input
-                type="text"
-                placeholder="Search coaches by name, email, or school..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bulk Actions Bar */}
-      {selectedCoaches.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <span className="text-sm font-medium text-red-900">
-                {selectedCoaches.length} coach(es) selected
-              </span>
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={handleBulkDelete}
-                disabled={bulkActionLoading}
-                className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {bulkActionLoading ? 'Deleting...' : 'Delete Selected'}
-              </button>
-              <button
-                onClick={() => setSelectedCoaches([])}
-                className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400"
-              >
-                Clear Selection
-              </button>
+              <h3 className="text-lg font-medium text-gray-900 mt-2">Delete Coach</h3>
+              <div className="mt-2 px-7 py-3">
+                <p className="text-sm text-gray-500">
+                  Are you sure you want to delete this coach? This action cannot be undone.
+                </p>
+              </div>
+              <div className="items-center px-4 py-3">
+                <button
+                  onClick={confirmDeleteCoach}
+                  className="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300"
+                >
+                  Delete Coach
+                </button>
+                <button
+                  onClick={() => {
+                    setDeleteModalOpen(false)
+                    setCoachToDelete(null)
+                  }}
+                  className="mt-3 px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
-
-      <div className="mt-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-          <div className="relative w-full md:w-1/3 mb-4 md:mb-0">
-            <input
-              type="text"
-              placeholder="Search coaches..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full p-2 border rounded-md pl-10"
-            />
-            <svg
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
-          <div className="flex items-center space-x-4">
-            {selectedCoaches.length > 0 && (
-              <button
-                onClick={handleBulkDelete}
-                className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 disabled:bg-red-300"
-                disabled={bulkActionLoading}
-              >
-                {bulkActionLoading ? 'Deleting...' : `Delete Selected (${selectedCoaches.length})`}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 bg-white shadow-sm rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold">Coaches</h2>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">School Distribution</h3>
-          <div className="space-y-2">
-            {Array.from(new Set(coaches.filter(c => c.school_name).map(c => c.school_name)))
-              .sort()
-              .slice(0, 10)
-              .map(school => {
-                const count = coaches.filter(c => c.school_name === school).length
-                return (
-                  <div key={`school-${school}`} className="flex justify-between items-center">
-                    <span className="text-sm text-gray-900">{school}</span>
-                    <span className="text-sm text-gray-500">{count} coach{count !== 1 ? 'es' : ''}</span>
-                  </div>
-                )
-              })}
-            {Array.from(new Set(coaches.filter(c => c.school_name).map(c => c.school_name))).length > 10 && (
-              <div key="more-schools" className="text-sm text-gray-500 text-center pt-2">
-                ...and {Array.from(new Set(coaches.filter(c => c.school_name).map(c => c.school_name))).length - 10} more schools
-              </div>
-            )}
-            {coaches.filter(c => !c.school_name).length > 0 && (
-              <div key="no-school" className="flex justify-between items-center">
-                <span className="text-sm text-gray-900">No school specified</span>
-                <span className="text-sm text-gray-500">{coaches.filter(c => !c.school_name).length} coach{coaches.filter(c => !c.school_name).length !== 1 ? 'es' : ''}</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Sport Distribution</h3>
-          <div className="space-y-2">
-            {Array.from(new Set(coaches.filter(c => c.sport).map(c => c.sport)))
-              .sort()
-              .map(sport => {
-                const count = coaches.filter(c => c.sport === sport).length
-                return (
-                  <div key={`sport-${sport}`} className="flex justify-between items-center">
-                    <span className="text-sm text-gray-900 capitalize">{sport}</span>
-                    <span className="text-sm text-gray-500">{count} coach{count !== 1 ? 'es' : ''}</span>
-                  </div>
-                )
-              })}
-            {coaches.filter(c => !c.sport).length > 0 && (
-              <div key="no-sport" className="flex justify-between items-center">
-                <span className="text-sm text-gray-900">Not specified</span>
-                <span className="text-sm text-gray-500">{coaches.filter(c => !c.sport).length} coach{coaches.filter(c => !c.sport).length !== 1 ? 'es' : ''}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {/* Delete Confirmation Modal */}
-    {deleteModalOpen && (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-          <div className="mt-3 text-center">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-              <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mt-2">Delete Coach</h3>
-            <div className="mt-2 px-7 py-3">
-              <p className="text-sm text-gray-500">
-                Are you sure you want to delete this coach? This action cannot be undone.
-              </p>
-            </div>
-            <div className="items-center px-4 py-3">
-              <button
-                onClick={confirmDeleteCoach}
-                className="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300"
-              >
-                Delete Coach
-              </button>
-              <button
-                onClick={() => {
-                  setDeleteModalOpen(false)
-                  setCoachToDelete(null)
-                }}
-                className="mt-3 px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
+      
+      {/* Edit Coach Modal */}
+      {editModalOpen && coachToEdit && (
+        <EditCoachModal
+          coach={coachToEdit}
+          isOpen={editModalOpen}
+          onClose={() => {
+            setEditModalOpen(false)
+            setCoachToEdit(null)
+          }}
+          onSave={confirmEditCoach}
+          loading={editLoading}
+        />
+      )}
     </>
   )
 } 

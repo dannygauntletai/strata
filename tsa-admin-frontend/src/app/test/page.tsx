@@ -8,7 +8,7 @@ interface HealthResult {
   services: {
     lambda?: string;
     dynamodb?: string;
-    ses?: string;
+    sendgrid?: string;
   };
   timestamp: string;
 }

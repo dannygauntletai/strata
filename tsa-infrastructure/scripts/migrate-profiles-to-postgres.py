@@ -46,7 +46,7 @@ class ProfileMigrator:
             # Try different possible secret names/ARNs
             possible_secrets = [
                 'tsa-coach/database-dev',
-                'arn:aws:secretsmanager:us-east-1:164722634547:secret:tsa-coach/database-dev-S8EIlv'
+                'arn:aws:secretsmanager:us-east-2:164722634547:secret:tsa-coach/database-dev-S8EIlv'
             ]
             
             secret_data = None
@@ -66,7 +66,7 @@ class ProfileMigrator:
             
             # Connect to PostgreSQL
             self.db_connection = psycopg2.connect(
-                host=secret_data.get('host', 'tsa-coach-portal-dev.c4jmsiuauast.us-east-1.rds.amazonaws.com'),
+                host=secret_data.get('host', 'tsa-coach-portal-dev.c4jmsiuauast.us-east-2.rds.amazonaws.com'),
                 database=secret_data.get('dbname', 'coach_portal'),
                 user=secret_data.get('username'),
                 password=secret_data.get('password'),

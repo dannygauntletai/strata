@@ -56,7 +56,7 @@ tsa-monorepo/
 ├── 📁 tsa-admin-backend/    # Admin Portal Lambda functions
 ├── 📁 tsa-admin-frontend/   # Admin Portal React app
 ├── 📁 tsa-coach-backend/    # Coach Portal Lambda functions  
-├── 📁 tsa-coach-frontend/   # Coach Portal Next.js app
+├── 📁 tsa-platform-frontend/   # Coach Portal Next.js app
 ├── 📁 tsa-infrastructure/   # AWS CDK infrastructure
 ├── 📄 .env.admin-frontend   # Admin frontend environment variables
 ├── 📄 .env.coach-frontend   # Coach frontend environment variables
@@ -99,7 +99,7 @@ The TSA monorepo now uses **consolidated environment variable naming** for consi
 | | `NEXT_PUBLIC_GOOGLE_PLACES_API_KEY` | Google Places API | Frontend |
 | | `GOOGLE_CLIENT_ID` | Google OAuth Client | Backend |
 | | `GOOGLE_CLIENT_SECRET` | Google OAuth Secret | Backend |
-| | `GOOGLE_AI_API_KEY` | Google AI/Gemini API | Backend |
+| | `GEMINI_API_KEY` | Google AI/Gemini API | Backend |
 | **DynamoDB Tables** | `TSA_PROFILES_TABLE` | Coach profiles | Backend |
 | | `TSA_INVITATIONS_TABLE` | Coach invitations | Backend |
 | | `TSA_PARENT_INVITATIONS_TABLE` | Parent invitations | Backend |
@@ -216,7 +216,7 @@ git pull origin develop
 git checkout -b feature/new-dashboard
 
 # 3. Make changes to any service
-cd tsa-coach-frontend
+cd tsa-platform-frontend
 # Edit files...
 
 # 4. Test changes locally
@@ -245,7 +245,7 @@ GitHub Actions automatically detects changes and deploys only affected services:
 | Change Location | What Gets Deployed |
 |----------------|-------------------|
 | `tsa-infrastructure/` | Full infrastructure layer |
-| `tsa-coach-frontend/` | Coach frontend build + backend deployment |
+| `tsa-platform-frontend/` | Coach frontend build + backend deployment |
 | `tsa-coach-backend/` | Coach backend only |
 | `tsa-admin-frontend/` | Admin frontend build + backend deployment |
 | `tsa-admin-backend/` | Admin backend only |
@@ -305,7 +305,7 @@ GitHub Actions automatically detects changes and deploys only affected services:
 
 ### **🎓 Coach Portal**
 
-**Frontend** (`tsa-coach-frontend/`)
+**Frontend** (`tsa-platform-frontend/`)
 - **Technology**: Next.js 13+ with App Router
 - **Features**: Dashboard, parent invitations, marketing tools
 - **Local URL**: http://localhost:3000
@@ -427,7 +427,7 @@ npm run bootstrap
 
 ```bash
 # Coach Frontend
-cd tsa-coach-frontend
+cd tsa-platform-frontend
 npm run dev          # Start development server
 npm run build        # Production build
 npm run lint         # ESLint checking
@@ -524,7 +524,7 @@ aws iam simulate-principal-policy \
 **❌ Frontend Build Failures**
 ```bash
 # Clear cache and reinstall
-cd tsa-coach-frontend
+cd tsa-platform-frontend
 rm -rf node_modules package-lock.json .next
 npm install
 npm run build

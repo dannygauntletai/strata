@@ -112,7 +112,7 @@ setup_service_repo() {
 }
 
 # Setup git repos for each service
-setup_service_repo "$TSA_SOURCE_DIR/tsa-coach-frontend" "coach-frontend"
+setup_service_repo "$TSA_SOURCE_DIR/tsa-platform-frontend" "coach-frontend"
 setup_service_repo "$TSA_SOURCE_DIR/tsa-coach-backend" "coach-backend"
 setup_service_repo "$TSA_SOURCE_DIR/tsa-admin-frontend" "admin-frontend"
 setup_service_repo "$TSA_SOURCE_DIR/tsa-admin-backend" "admin-backend"
@@ -121,8 +121,8 @@ setup_service_repo "$TSA_SOURCE_DIR/tsa-infrastructure" "infrastructure"
 echo -e "${YELLOW}📁 Adding services as submodules...${NC}"
 
 # Add submodules
-if [ -d "$TSA_SOURCE_DIR/tsa-coach-frontend" ]; then
-    git submodule add "$TSA_SOURCE_DIR/tsa-coach-frontend" services/coach-frontend
+if [ -d "$TSA_SOURCE_DIR/tsa-platform-frontend" ]; then
+    git submodule add "$TSA_SOURCE_DIR/tsa-platform-frontend" services/coach-frontend
     echo "✅ Added coach-frontend as submodule"
 fi
 
@@ -339,7 +339,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: us-east-2
       - name: Deploy infrastructure
         run: |
           cd infrastructure

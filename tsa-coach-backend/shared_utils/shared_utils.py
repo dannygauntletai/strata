@@ -379,7 +379,7 @@ def process_document_upload(file_data: bytes, enrollment_id: str, document_type:
         )
         
         # Store document metadata in DynamoDB
-        documents_table = get_dynamodb_table(os.environ.get('DOCUMENTS_TABLE', 'tsa-coach-documents-v3-dev'))
+        documents_table = get_dynamodb_table(os.environ.get('DOCUMENTS_TABLE', 'tsa-coach-documents-v1-dev'))
         
         document_metadata = {
             'document_id': document_id,

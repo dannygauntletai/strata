@@ -6,7 +6,7 @@ on:
     types: [opened, synchronize, reopened]
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: us-east-2
   NODE_VERSION: '18'
   PYTHON_VERSION: '3.11'
 
@@ -34,7 +34,7 @@ jobs:
             infrastructure:
               - 'tsa-infrastructure/**'
             coach-frontend:
-              - 'tsa-coach-frontend/**'
+              - 'tsa-platform-frontend/**'
             coach-backend:
               - 'tsa-coach-backend/**'
             admin-frontend:
@@ -98,32 +98,32 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           
       - name: Install dependencies
-        working-directory: tsa-coach-frontend
+        working-directory: tsa-platform-frontend
         run: npm ci
         
       - name: Lint
-        working-directory: tsa-coach-frontend
+        working-directory: tsa-platform-frontend
         run: |
           echo "🧹 Running Coach Frontend linting..."
           npm run lint
           echo "✅ Coach Frontend linting passed"
           
       - name: Type check
-        working-directory: tsa-coach-frontend
+        working-directory: tsa-platform-frontend
         run: |
           echo "🔍 Running TypeScript type checking..."
           npm run type-check || echo "⚠️ Type checking issues found"
           echo "✅ Type checking completed"
           
       - name: Build
-        working-directory: tsa-coach-frontend
+        working-directory: tsa-platform-frontend
         run: |
           echo "🏗️ Building Coach Frontend..."
           npm run build
           echo "✅ Coach Frontend build successful"
           
       - name: Test
-        working-directory: tsa-coach-frontend
+        working-directory: tsa-platform-frontend
         run: |
           echo "🧪 Running Coach Frontend tests..."
           # npm test -- --watchAll=false --coverage (uncomment when tests are available)
@@ -275,7 +275,7 @@ jobs:
           
       - name: Security audit - Coach Frontend
         if: needs.detect-changes.outputs.coach-frontend == 'true'
-        working-directory: tsa-coach-frontend
+        working-directory: tsa-platform-frontend
         run: |
           echo "🔒 Running security audit for Coach Frontend..."
           npm audit --audit-level=high || echo "⚠️ Security vulnerabilities found"

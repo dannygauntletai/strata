@@ -1,26 +1,27 @@
 {
   "name": "tsa-monorepo",
   "version": "1.0.0",
-  "description": "Texas Sports Academy - Unified Monorepo",
+  "description": "Texas Sports Academy - Unified Monorepo with Centralized Endpoint Management",
   "private": true,
   "workspaces": [
-    "tsa-coach-frontend",
+    "tsa-platform-frontend",
     "tsa-admin-frontend",
     "tsa-coach-backend"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:coach\" \"npm run dev:admin\"",
-    "dev:coach": "cd tsa-coach-frontend && npm run dev",
-    "dev:admin": "cd tsa-admin-frontend && npm run dev",
+    "dev": "npm run sync:endpoints && concurrently \"npm run dev:coach\" \"npm run dev:admin\"",
+    "dev:coach": "npm run sync:endpoints && npm run dev --workspace=tsa-platform-frontend",
+    "dev:admin": "npm run sync:endpoints && npm run dev --workspace=tsa-admin-frontend",
+    "sync:endpoints": "./sync-endpoints.sh",
     "build:all": "npm run build:coach && npm run build:admin",
-    "build:coach": "cd tsa-coach-frontend && npm run build",
-    "build:admin": "cd tsa-admin-frontend && npm run build",
+    "build:coach": "npm run build --workspace=tsa-platform-frontend",
+    "build:admin": "npm run build --workspace=tsa-admin-frontend",
     "test:all": "npm run test:coach && npm run test:admin",
-    "test:coach": "cd tsa-coach-frontend && npm test",
-    "test:admin": "cd tsa-admin-frontend && npm test",
+    "test:coach": "npm test --workspace=tsa-platform-frontend",
+    "test:admin": "npm test --workspace=tsa-admin-frontend",
     "lint:all": "npm run lint:coach && npm run lint:admin",
-    "lint:coach": "cd tsa-coach-frontend && npm run lint",
-    "lint:admin": "cd tsa-admin-frontend && npm run lint",
+    "lint:coach": "npm run lint --workspace=tsa-platform-frontend",
+    "lint:admin": "npm run lint --workspace=tsa-admin-frontend",
     "deploy:coach": "cd tsa-infrastructure && cdk deploy tsa-coach-backend-dev",
     "deploy:admin": "cd tsa-infrastructure && cdk deploy tsa-admin-backend-dev",
     "deploy:infra": "cd tsa-infrastructure && cdk deploy --all",
@@ -28,25 +29,27 @@
     "deploy:staging": "cd tsa-infrastructure && cdk deploy --all --context stage=staging",
     "deploy:prod": "cd tsa-infrastructure && cdk deploy --all --context stage=prod",
     "clean": "npm run clean:coach && npm run clean:admin && npm run clean:infra",
-    "clean:coach": "cd tsa-coach-frontend && rm -rf .next node_modules",
+    "clean:coach": "cd tsa-platform-frontend && rm -rf .next node_modules",
     "clean:admin": "cd tsa-admin-frontend && rm -rf .next node_modules",
     "clean:infra": "cd tsa-infrastructure && rm -rf cdk.out node_modules",
     "install:all": "npm install && npm run install:services",
-    "install:services": "cd tsa-coach-frontend && npm install && cd ../tsa-admin-frontend && npm install && cd ../tsa-coach-backend && npm install",
-    "sync:env": "cd tsa-infrastructure/scripts && echo '🔐 Creating local .env files (gitignored)...' && python sync-frontend-urls.py",
-    "sync:env:prod": "cd tsa-infrastructure/scripts && echo '🔐 Creating local .env files (gitignored)...' && python sync-frontend-urls.py --stage prod",
-    "update:urls": "./tsa-infrastructure/scripts/update-frontend-urls.sh",
-    "bootstrap": "npm run install:all && npm run build:all",
+    "install:services": "cd tsa-platform-frontend && npm install && cd ../tsa-admin-frontend && npm install && cd ../tsa-coach-backend && npm install",
+    "sync:endpoints:dev": "./sync-endpoints.sh dev",
+    "sync:endpoints:staging": "./sync-endpoints.sh staging",
+    "sync:endpoints:prod": "./sync-endpoints.sh prod",
+    "sync:endpoints:show": "./sync-endpoints.sh dev us-east-2 --show-config",
+    "bootstrap": "npm run install:all && npm run sync:endpoints && npm run build:all",
+    "setup": "npm run install:all && npm run sync:endpoints && echo '🎉 Setup complete! Run npm run dev to start development'",
     "env:setup": "echo '📋 Setting up environment file...' && cp .env.example .env && echo '✅ Created .env from .env.example' && echo '⚠️  Remember to replace placeholder values with real API keys!'"
   },
   "devDependencies": {
-    "concurrently": "^7.6.0",
-    "husky": "^8.0.3",
-    "lint-staged": "^13.2.0",
-    "prettier": "^2.8.8",
     "@typescript-eslint/eslint-plugin": "^5.59.0",
     "@typescript-eslint/parser": "^5.59.0",
-    "eslint": "^8.40.0"
+    "concurrently": "^7.6.0",
+    "eslint": "^8.40.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^13.2.0",
+    "prettier": "^2.8.8"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
@@ -74,7 +77,13 @@
     "cdk",
     "lambda",
     "education",
-    "sports-academy"
+    "sports-academy",
+    "endpoint-management",
+    "configuration-sync"
   ],
-  "license": "MIT"
-} 
+  "license": "MIT",
+  "dependencies": {
+    "aws-sdk": "^2.1692.0",
+    "uuid": "^11.1.0"
+  }
+}

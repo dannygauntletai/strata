@@ -374,7 +374,7 @@ RDS_PASSWORD=your-password
 
 ### Required for DynamoDB
 ```bash
-AWS_REGION=us-east-1
+AWS_REGION=us-east-2
 DYNAMODB_TABLE_PREFIX=tsa-coach
 ```
 

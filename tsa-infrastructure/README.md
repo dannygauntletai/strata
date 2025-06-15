@@ -93,7 +93,7 @@ tsa-coach/ (Root project directory)
 │   ├── lambda_onboard/             # Coach onboarding
 │   ├── lambda_quizzes/             # Quiz and assessments
 │   └── lambda_invitations/         # Invitation management
-├── tsa-coach-frontend/             # Coach Portal Frontend (Next.js)
+├── tsa-platform-frontend/             # Coach Portal Frontend (Next.js)
 │   ├── src/                        # Coach-facing application
 │   ├── components/                 # UI components
 │   ├── pages/                      # Coach portal pages

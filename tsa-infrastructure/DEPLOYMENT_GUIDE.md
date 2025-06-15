@@ -26,7 +26,7 @@ tsa-coach/ (Root directory)
 ├── tsa-lead-backend/             # Lead Management Backend (standalone service)
 ├── tsa-admissions-backend/       # Admissions Portal Backend (enrollment focused)
 ├── tsa-analytics-backend/        # Analytics Service Backend
-├── tsa-coach-frontend/           # Coach Portal Frontend
+├── tsa-platform-frontend/           # Coach Portal Frontend
 └── tsa-admissions-frontend/      # Admissions Portal Frontend (for parents)
 ```
 
@@ -224,7 +224,7 @@ cdk deploy --all --context stage=prod
 
 psql -h {rds-endpoint} -U postgres -d tsa_coach
 
-# Run schema files from tsa-coach-frontend/database/
+# Run schema files from tsa-platform-frontend/database/
 \i 01-organizations.sql
 \i 02-users.sql  
 \i 03-coaches.sql
@@ -251,7 +251,7 @@ aws lambda update-function-configuration \
 Update frontend applications with API endpoints:
 
 ```javascript
-// tsa-coach-frontend/.env.production
+// tsa-platform-frontend/.env.production
 NEXT_PUBLIC_COACH_PORTAL_API=https://{coach-portal-api-url}
 NEXT_PUBLIC_ADMISSIONS_API=https://{admissions-portal-api-url}
 NEXT_PUBLIC_ANALYTICS_API=https://{analytics-api-url}

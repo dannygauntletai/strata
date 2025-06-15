@@ -22,7 +22,7 @@ on:
         default: 'all'
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: us-east-2
   NODE_VERSION: '18'
   PYTHON_VERSION: '3.11'
 
@@ -52,7 +52,7 @@ jobs:
             infrastructure:
               - 'tsa-infrastructure/**'
             coach-frontend:
-              - 'tsa-coach-frontend/**'
+              - 'tsa-platform-frontend/**'
             coach-backend:
               - 'tsa-coach-backend/**'
             admin-frontend:
@@ -179,7 +179,7 @@ jobs:
           
       - name: Build Coach Frontend
         if: needs.detect-changes.outputs.coach-frontend == 'true'
-        working-directory: tsa-coach-frontend
+        working-directory: tsa-platform-frontend
         run: |
           echo "🎓 Building Coach Frontend..."
           npm ci
@@ -188,7 +188,7 @@ jobs:
           
       - name: Test Coach Frontend
         if: needs.detect-changes.outputs.coach-frontend == 'true'
-        working-directory: tsa-coach-frontend
+        working-directory: tsa-platform-frontend
         run: |
           echo "🧪 Testing Coach Frontend..."
           npm run lint

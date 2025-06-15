@@ -24,9 +24,9 @@ cd tsa-admin-frontend
 2. **Or manually create `.env.local`:**
 ```bash
 # API Endpoints (current from CDK deployment)
-NEXT_PUBLIC_ADMIN_API_URL=https://gt87xbmjcj.execute-api.us-east-1.amazonaws.com/prod
-NEXT_PUBLIC_COACH_API_URL=https://deibk5wgx1.execute-api.us-east-1.amazonaws.com/prod
-NEXT_PUBLIC_PASSWORDLESS_AUTH_URL=https://wlcmxb3pc8.execute-api.us-east-1.amazonaws.com/v1
+NEXT_PUBLIC_ADMIN_API_URL=https://gt87xbmjcj.execute-api.us-east-2.amazonaws.com/prod
+NEXT_PUBLIC_COACH_API_URL=https://deibk5wgx1.execute-api.us-east-2.amazonaws.com/prod
+NEXT_PUBLIC_PASSWORDLESS_AUTH_URL=https://wlcmxb3pc8.execute-api.us-east-2.amazonaws.com/v1
 
 # Admin Configuration
 NEXT_PUBLIC_ADMIN_EMAIL=danny.mota@superbuilders.school
@@ -38,9 +38,9 @@ NEXT_PUBLIC_DEBUG_MODE=true
 
 ## 📡 **Current API Endpoints** (From Latest CDK Deployment)
 
-- **Admin Backend:** `https://gt87xbmjcj.execute-api.us-east-1.amazonaws.com/prod`
-- **Coach Backend:** `https://deibk5wgx1.execute-api.us-east-1.amazonaws.com/prod`
-- **Passwordless Auth:** `https://wlcmxb3pc8.execute-api.us-east-1.amazonaws.com/v1`
+- **Admin Backend:** `https://gt87xbmjcj.execute-api.us-east-2.amazonaws.com/prod`
+- **Coach Backend:** `https://deibk5wgx1.execute-api.us-east-2.amazonaws.com/prod`
+- **Passwordless Auth:** `https://wlcmxb3pc8.execute-api.us-east-2.amazonaws.com/v1`
 
 ## 🔄 Environment Priority
 
@@ -152,11 +152,11 @@ npm run dev
 1. **Check API endpoints:**
 ```bash
 # Verify admin backend is running
-curl https://gt87xbmjcj.execute-api.us-east-1.amazonaws.com/prod/health
+curl https://gt87xbmjcj.execute-api.us-east-2.amazonaws.com/prod/health
 
 # Check authentication
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-     https://gt87xbmjcj.execute-api.us-east-1.amazonaws.com/prod/admin/coaches
+     https://gt87xbmjcj.execute-api.us-east-2.amazonaws.com/prod/admin/coaches
 ```
 
 2. **Check admin authentication:**
@@ -196,9 +196,9 @@ localStorage.removeItem('tsa-admin-auth')
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `NEXT_PUBLIC_ADMIN_API_URL` | Admin backend API | `https://gt87xbmjcj.execute-api.us-east-1.amazonaws.com/prod` |
-| `NEXT_PUBLIC_COACH_API_URL` | Coach backend API | `https://deibk5wgx1.execute-api.us-east-1.amazonaws.com/prod` |
-| `NEXT_PUBLIC_PASSWORDLESS_AUTH_URL` | Auth API | `https://wlcmxb3pc8.execute-api.us-east-1.amazonaws.com/v1` |
+| `NEXT_PUBLIC_ADMIN_API_URL` | Admin backend API | `https://gt87xbmjcj.execute-api.us-east-2.amazonaws.com/prod` |
+| `NEXT_PUBLIC_COACH_API_URL` | Coach backend API | `https://deibk5wgx1.execute-api.us-east-2.amazonaws.com/prod` |
+| `NEXT_PUBLIC_PASSWORDLESS_AUTH_URL` | Auth API | `https://wlcmxb3pc8.execute-api.us-east-2.amazonaws.com/v1` |
 | `NEXT_PUBLIC_ADMIN_EMAIL` | Authorized admin email | `danny.mota@superbuilders.school` |
 | `NEXT_PUBLIC_ENVIRONMENT` | Environment name | `development` |
 | `NEXT_PUBLIC_DEBUG_MODE` | Enable debug logging | `true` |

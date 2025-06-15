@@ -1,986 +1,576 @@
 """
-Lambda handler for onboarding functionality - Working Version
-Demonstrates CORS fix and basic onboarding flow without PostgreSQL
+TSA Coach Onboarding Handler
+Handles invitation validation, progress tracking, and onboarding completion
 """
+
 import json
-import os
 import boto3
-from typing import Dict, Any
-from datetime import datetime
+import os
+import logging
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional
+from decimal import Decimal
 
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Main handler for onboarding requests with CORS"""
+# Initialize AWS clients
+dynamodb = boto3.resource('dynamodb')
+
+# Environment variables
+ONBOARDING_SESSIONS_TABLE = os.environ.get('ONBOARDING_SESSIONS_TABLE')
+INVITATIONS_TABLE = os.environ.get('INVITATIONS_TABLE')
+USERS_TABLE = os.environ.get('USERS_TABLE')
+
+def lambda_handler(event, context):
+    """Main Lambda handler for coach onboarding"""
+    
     try:
-        print(f"Event received: {json.dumps(event, default=str)}")
-        
-        # Handle CORS preflight immediately
-        if event.get('httpMethod') == 'OPTIONS':
-            return create_cors_response(204, {})
-        
-        http_method = event.get('httpMethod', '')
+        # Parse the event
+        http_method = event.get('httpMethod', 'GET')
         path = event.get('path', '')
-        
-        print(f"Processing {http_method} {path}")
-        
-        # Route to appropriate handler - ONLY onboarding related endpoints
-        if '/complete' in path:
-            return handle_complete_onboarding(event, context)
-        elif '/validate-invite' in path:
-            return handle_validate_invitation(event, context)
-        elif '/auth/validate-email' in path:
-            return handle_validate_email(event, context)
-        elif '/health' in path:
-            return handle_health_check(event, context)
-        elif path == '/profile/photo' and http_method == 'POST':
-            return handle_profile_photo_upload(event, context)
-        elif path == '/profile' and http_method == 'GET':
-            return handle_get_profile(event, context)
-        elif path == '/validate-email':
-            return handle_validate_email(event, context)
-        elif path.startswith('/validate-invitation/'):
-            return handle_validate_invitation(event, context)
-        elif path == '/progress':
-            return handle_onboarding_progress(event, context)
-        elif path == '/save-progress':
-            return handle_save_progress(event, context)
-        elif path == '/get-progress':
-            return handle_get_progress(event, context)
-        else:
-            return create_cors_response(404, {'error': 'Endpoint not found'})
-            
-    except Exception as e:
-        print(f"Error in handler: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        
-        return create_cors_response(500, {
-            'error': 'Internal server error',
-            'details': str(e)
-        })
-
-
-def create_cors_response(status_code: int, body: dict) -> dict:
-    """Create response with proper CORS headers"""
-    return {
-        "statusCode": status_code,
-        "headers": {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD",
-            "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Requested-With,Accept,Accept-Language,Cache-Control",
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "600",
-            "Content-Type": "application/json"
-        },
-        "body": json.dumps(body, default=str)
-    }
-
-
-def parse_event_body(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Parse request body from API Gateway event"""
-    try:
         body = event.get('body', '{}')
         
-        # Handle base64 encoded body
-        if event.get('isBase64Encoded', False):
-            import base64
-            body = base64.b64decode(body).decode('utf-8')
+        # Parse body if it exists
+        if body:
+            try:
+                body_data = json.loads(body)
+            except json.JSONDecodeError:
+                body_data = {}
+        else:
+            body_data = {}
         
-        # Parse JSON body
-        if isinstance(body, str):
-            return json.loads(body) if body else {}
+        logger.info(f"Coach onboarding request: {http_method} {path}")
         
-        return body if isinstance(body, dict) else {}
-        
-    except json.JSONDecodeError as e:
-        print(f"Error parsing request body: {str(e)}")
-        return {}
+        # Route requests
+        if path.endswith('/validate-invitation') and http_method == 'POST':
+            return validate_invitation(body_data)
+        elif path.endswith('/progress') and http_method == 'POST':
+            return get_onboarding_progress(body_data)
+        elif path.endswith('/progress') and http_method == 'PUT':
+            return update_onboarding_progress(body_data)
+        elif path.endswith('/complete') and http_method == 'POST':
+            return complete_onboarding(body_data)
+        elif http_method == 'GET':
+            return health_check()
+        else:
+            return create_response(404, {'error': 'Endpoint not found'})
+            
     except Exception as e:
-        print(f"Unexpected error parsing body: {str(e)}")
-        return {}
+        logger.error(f"Error in coach onboarding handler: {str(e)}")
+        return create_response(500, {'error': 'Internal server error'})
 
-
-def handle_validate_invitation(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Validate invitation token and return invitation details"""
+def validate_invitation(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate invitation token and return comprehensive coach data"""
+    
     try:
-        query_params = event.get('queryStringParameters') or {}
-        invitation_token = query_params.get('token')
-        
+        invitation_token = data.get('invitation_token')
         if not invitation_token:
-            return create_cors_response(400, {'error': 'Invitation token is required'})
+            return create_response(400, {'error': 'invitation_token is required'})
         
-        # Query invitations table by token
-        dynamodb = boto3.resource('dynamodb')
+        # Get invitation from admin backend table
+        invitations_table = dynamodb.Table(INVITATIONS_TABLE)
         
-        # Try to get the invitations table - it might be in the admin service
-        invitations_table_name = os.environ.get('INVITATIONS_TABLE', 'coach-invitations')
-        
-        try:
-            invitations_table = dynamodb.Table(invitations_table_name)
-            
-            # Scan for invitation token (in production, you'd want a GSI for this)
-            response = invitations_table.scan(
-                FilterExpression='invitation_token = :token',
-                ExpressionAttributeValues={':token': invitation_token}
-            )
-            
-            items = response.get('Items', [])
-            if not items:
-                return create_cors_response(404, {'error': 'Invalid invitation token'})
-            
-            invitation = items[0]
-            
-            # Check if invitation is still valid
-            if invitation.get('status') != 'pending':
-                return create_cors_response(400, {
-                    'error': 'Invitation is no longer valid',
-                    'status': invitation.get('status')
-                })
-            
-            # Check if invitation has expired
-            expires_at = invitation.get('expires_at')
-            if expires_at and datetime.utcnow().timestamp() > expires_at:
-                # Update invitation status to expired
-                invitations_table.update_item(
-                    Key={'invitation_id': invitation['invitation_id']},
-                    UpdateExpression='SET #status = :status',
-                    ExpressionAttributeNames={'#status': 'status'},
-                    ExpressionAttributeValues={':status': 'expired'}
-                )
-                return create_cors_response(400, {'error': 'Invitation has expired'})
-            
-            # Return invitation details for pre-filling the form
-            invitation_data = {}
-            
-            # Only include fields that have actual values
-            if invitation.get('email'):
-                invitation_data['email'] = invitation.get('email')
-            if invitation.get('role'):
-                invitation_data['role'] = invitation.get('role')
-            if invitation.get('school_name'):
-                invitation_data['school_name'] = invitation.get('school_name')
-            if invitation.get('school_type'):
-                invitation_data['school_type'] = invitation.get('school_type')
-            if invitation.get('sport'):
-                invitation_data['sport'] = invitation.get('sport')
-            if invitation.get('message'):
-                invitation_data['message'] = invitation.get('message')
-            
-            return create_cors_response(200, {
-                'valid': True,
-                'invitation': invitation_data
-            })
-            
-        except Exception as e:
-            print(f"Error accessing invitations table: {str(e)}")
-            # If invitations table doesn't exist or isn't accessible, allow onboarding anyway
-            return create_cors_response(200, {
-                'valid': True,
-                'note': 'Invitation system not yet deployed, allowing direct onboarding'
-            })
-            
-    except Exception as e:
-        print(f"Error validating invitation: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
-
-
-def handle_validate_email(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Validate if email belongs to a coach (either registered or invited)"""
-    try:
-        if event.get('httpMethod') != 'POST':
-            return create_cors_response(405, {'error': 'Method not allowed'})
-        
-            body = parse_event_body(event)
-        email = body.get('email', '').lower().strip()
-        
-        if not email:
-            return create_cors_response(400, {'error': 'Email is required'})
-        
-        if '@' not in email or '.' not in email:
-            return create_cors_response(400, {'error': 'Invalid email format'})
-        
-        dynamodb = boto3.resource('dynamodb')
-        
-        # Check if email exists in profiles table (registered coaches)
-        try:
-            profiles_table_name = os.environ.get('PROFILES_TABLE', 'profiles')
-            profiles_table = dynamodb.Table(profiles_table_name)
-            
-            # Scan for email in profiles (in production, you'd want a GSI)
-            profiles_response = profiles_table.scan(
-                FilterExpression='email = :email',
-                ExpressionAttributeValues={':email': email},
-                Limit=1
-            )
-            
-            if profiles_response.get('Items'):
-                return create_cors_response(200, {
-                    'valid': True,
-                    'found': 'profile',
-                    'message': 'Email found in registered coaches'
-                })
-        
-        except Exception as e:
-            print(f"Error checking profiles table: {str(e)}")
-        
-        # Check if email exists in invitations table (pending/accepted invitations)
-        try:
-            invitations_table_name = os.environ.get('INVITATIONS_TABLE', 'coach-invitations')
-            invitations_table = dynamodb.Table(invitations_table_name)
-            
-            # Scan for email in invitations
-            invitations_response = invitations_table.scan(
-                FilterExpression='email = :email AND (#status = :pending OR #status = :accepted)',
-                ExpressionAttributeValues={
-                    ':email': email,
-                    ':pending': 'pending',
-                    ':accepted': 'accepted'
-                },
-                ExpressionAttributeNames={'#status': 'status'},
-                Limit=1
-            )
-            
-            if invitations_response.get('Items'):
-                invitation = invitations_response['Items'][0]
-                return create_cors_response(200, {
-                    'valid': True,
-                    'found': 'invitation',
-                    'status': invitation.get('status'),
-                    'message': f'Email found in {invitation.get("status")} invitations'
-                })
-        
-        except Exception as e:
-            print(f"Error checking invitations table: {str(e)}")
-        
-        # Email not found in either table
-        return create_cors_response(404, {
-            'valid': False,
-            'message': 'Email not found. Only invited coaches can access this portal.'
-        })
-            
-    except Exception as e:
-        print(f"Error validating email: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
-
-
-def validate_onboarding_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate onboarding wizard data"""
-    
-    # Check if this is invitation-based onboarding
-    invitation_token = data.get('invitation_token')
-    
-    if invitation_token:
-        # Simplified validation for invitation-based onboarding
-        required_fields = [
-            'email',
-            'full_name',
-            'cell_phone', 
-            'location'
-        ]
-        
-        # Check required fields for invitation flow
-        missing_fields = []
-        for field in required_fields:
-            if field not in data or not data[field]:
-                missing_fields.append(field)
-        
-        if missing_fields:
-            return {
-                'valid': False,
-                'error': f"Missing required fields for coach application: {', '.join(missing_fields)}"
-            }
-        
-        # Validate email format
-        email = data.get('email', '')
-        if '@' not in email or '.' not in email:
-            return {
-                'valid': False,
-                'error': 'Invalid email format'
-            }
-        
-        return {'valid': True}
-    
-    else:
-        # Full validation for regular onboarding
-        required_fields = [
-            'email',
-            'school_name',
-            'sport',
-            'school_type',
-            'grade_levels_served',
-            'role_type',
-            'academic_year'
-        ]
-        
-        # Check required fields
-        missing_fields = []
-        for field in required_fields:
-            if field not in data or not data[field]:
-                missing_fields.append(field)
-        
-        if missing_fields:
-            return {
-                'valid': False,
-                'error': f"Missing required fields: {', '.join(missing_fields)}"
-            }
-        
-        # Validate email format
-        email = data.get('email', '')
-        if '@' not in email or '.' not in email:
-            return {
-                'valid': False,
-                'error': 'Invalid email format'
-            }
-        
-        # Validate sport selection
-        valid_sports = ['football', 'basketball', 'baseball', 'soccer', 'track', 'tennis', 'volleyball', 'other']
-        sport = data.get('sport', '').lower()
-        if sport not in valid_sports:
-            return {
-                'valid': False,
-                'error': f"Invalid sport. Must be one of: {', '.join(valid_sports)}"
-            }
-        
-        # Validate school type
-        valid_school_types = ['elementary', 'middle', 'high', 'combined', 'k-12']
-        school_type = data.get('school_type', '').lower()
-        if school_type not in valid_school_types:
-            return {
-                'valid': False,
-                'error': f"Invalid school type. Must be one of: {', '.join(valid_school_types)}"
-            }
-        
-        # Validate role type
-        valid_role_types = ['school_owner', 'instructor', 'administrator', 'coach', 'director', 'principal', 'counselor']
-        role_type = data.get('role_type', '').lower()
-        if role_type not in valid_role_types:
-            return {
-                'valid': False,
-                'error': f"Invalid role type. Must be one of: {', '.join(valid_role_types)}"
-            }
-        
-        # Validate grade levels served
-        grade_levels = data.get('grade_levels_served', [])
-        if not isinstance(grade_levels, list) or len(grade_levels) == 0:
-            return {
-                'valid': False,
-                'error': 'Grade levels served must be specified as a non-empty array'
-            }
-        
-        # Validate academic year format
-        academic_year = data.get('academic_year', '')
-        if not academic_year or len(academic_year) != 9 or academic_year[4] != '-':
-            return {
-                'valid': False,
-                'error': 'Academic year must be in format YYYY-YYYY (e.g., 2024-2025)'
-            }
-        
-        return {'valid': True}
-
-
-def handle_complete_onboarding(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Complete onboarding process - creates profiles in both DynamoDB and PostgreSQL"""
-    try:
-        print("Starting onboarding completion process")
-        body = parse_event_body(event)
-        print(f"Parsed body: {json.dumps(body, default=str)}")
-        
-        # Check if this is invitation-based onboarding
-        invitation_token = body.get('invitation_token')
-        if invitation_token:
-            print(f"Processing invitation-based onboarding with token: {invitation_token}")
-            
-            # Validate and update invitation status
-            try:
-                invitation_result = validate_and_update_invitation(invitation_token, body.get('email'))
-                if not invitation_result.get('valid'):
-                    return create_cors_response(400, {
-                        'error': invitation_result.get('error', 'Invalid invitation')
-                    })
-            except Exception as e:
-                print(f"Error validating invitation: {str(e)}")
-                # Continue with onboarding even if invitation validation fails
-        
-        # Validate onboarding data
-        print("Validating onboarding data...")
-        validation_result = validate_onboarding_data(body)
-        if not validation_result['valid']:
-            print(f"Validation failed: {validation_result['error']}")
-            return create_cors_response(400, {'error': validation_result['error']})
-        
-        print("Validation passed, creating profile...")
-        
-        # Create a unique profile ID
-        profile_id = f"profile_{datetime.utcnow().isoformat().replace(':', '').replace('-', '').replace('.', '')}"
-        
-        # Generate school_id from school_name for parent invitations compatibility
-        school_name = body.get('school_name', '')
-        school_id = f"school_{school_name.lower().replace(' ', '_').replace('-', '_')}" if school_name else f"school_{profile_id}"
-        
-        # 1. Store in DynamoDB (operational data per database_schema.md)
-        try:
-            print("Storing profile in DynamoDB...")
-            dynamodb = boto3.resource('dynamodb')
-            profiles_table = dynamodb.Table(os.environ.get('PROFILES_TABLE', 'profiles'))
-            
-            # Create profile with different data based on onboarding type
-            if invitation_token:
-                # Invitation-based onboarding - simplified profile
-                profile = {
-                    'profile_id': profile_id,
-                    'school_id': school_id,  # Add school_id for parent invitations
-                    'email': body['email'],
-                    'first_name': body.get('full_name', '').split(' ')[0] if body.get('full_name') else '',
-                    'last_name': ' '.join(body.get('full_name', '').split(' ')[1:]) if body.get('full_name') and len(body.get('full_name', '').split(' ')) > 1 else '',
-                    'phone': body['cell_phone'],
-                    'location': body['location'],
-                    
-                    # Use invitation data for school/role info
-                    'school_name': body.get('school_name', ''),
-                    'role_type': body.get('role_type', body.get('role', 'coach')),
-                    'sport': body.get('sport', ''),
-                    'school_type': body.get('school_type', ''),
-                    
-                    # Provide defaults for required fields
-                    'grade_levels_served': body.get('grade_levels_served', []),
-                    'academic_year': body.get('academic_year', '2024-2025'),
-                    
-                    'onboarding_progress': {
-                        'current_step': 10,
-                        'is_completed': True
-                    },
-                    'status': 'invitation_completed',
-                    'invitation_based': True,
-                    'invitation_token': invitation_token,
-                    'created_at': datetime.utcnow().isoformat(),
-                    'updated_at': datetime.utcnow().isoformat()
-                }
-            else:
-                # Regular onboarding - full profile
-                profile = {
-                    'profile_id': profile_id,
-                    'school_id': school_id,  # Add school_id for parent invitations
-                    'email': body['email'],
-                    'first_name': body.get('full_name', '').split(' ')[0] if body.get('full_name') else '',
-                    'last_name': ' '.join(body.get('full_name', '').split(' ')[1:]) if body.get('full_name') and len(body.get('full_name', '').split(' ')) > 1 else '',
-                    'school_name': body['school_name'],
-                    'sport': body['sport'],
-                    'school_type': body['school_type'],
-                    'grade_levels_served': body['grade_levels_served'],
-                    'role_type': body['role_type'],
-                    'academic_year': body['academic_year'],
-                    
-                    # Coach application form fields
-                    'phone': body.get('cell_phone', ''),
-                    'location': body.get('location', ''),
-                    
-                    'onboarding_progress': {
-                        'current_step': 10,
-                        'is_completed': True
-                    },
-                    'status': 'completed',
-                    'invitation_based': False,
-                    'created_at': datetime.utcnow().isoformat(),
-                    'updated_at': datetime.utcnow().isoformat()
-                }
-            
-            profiles_table.put_item(Item=profile)
-            print(f"✅ Profile stored in DynamoDB: {profile_id}")
-            
-        except Exception as e:
-            print(f"❌ DynamoDB error: {str(e)}")
-            return create_cors_response(500, {
-                'error': 'Failed to create DynamoDB profile',
-                'details': str(e)
-            })
-        
-        # 2. Store in PostgreSQL (OneRoster compliance per database_schema.md)
-        try:
-            print("Creating OneRoster compliant user in PostgreSQL...")
-            import sys
-            import asyncio
-            import uuid
-            sys.path.append('/opt/python')
-            
-            from shared_db_utils.database import get_async_db_manager
-            from shared_db_utils.models import User, Organization
-            from sqlalchemy.dialects.postgresql import insert
-            
-            # Map role types from profile to OneRoster roles
-            role_mapping = {
-                'school_owner': 'administrator',
-                'instructor': 'teacher', 
-                'administrator': 'administrator',
-                'coach': 'teacher',  # Coaches are teachers in OneRoster
-                'director': 'administrator',
-                'principal': 'administrator',
-                'counselor': 'teacher'
-            }
-            
-            profile_role = profile.get('role_type', 'teacher')
-            oneroster_role = role_mapping.get(profile_role, 'teacher')
-            
-            # Create org_ids array for school associations
-            org_ids = []
-            school_name = profile.get('school_name', '')
-            if school_name:
-                org_id = f"org_{school_name.lower().replace(' ', '_').replace('-', '_')}"
-                org_ids.append(org_id)
-            
-            # Generate OneRoster compliant sourced_id
-            sourced_id = f"user_{profile_id}"
-            
-            # Create PostgreSQL user record
-            user_data = {
-                'sourced_id': sourced_id,
-                'status': 'active',
-                'date_last_modified': datetime.utcnow(),
-                'model_metadata': {
-                    'original_profile_id': profile_id,
-                    'created_from': 'coach_onboarding',
-                    'creation_date': datetime.utcnow().isoformat(),
-                    'original_role_type': profile_role
-                },
-                'username': profile.get('email', '').split('@')[0] if profile.get('email') else None,
-                'user_ids': [{
-                    'type': 'email',
-                    'identifier': profile.get('email', '')
-                }],
-                'enabled_user': True,
-                'given_name': profile.get('first_name', ''),
-                'family_name': profile.get('last_name', ''),
-                'role': oneroster_role,
-                'identifier': profile_id,
-                'email': profile.get('email', ''),
-                'phone': profile.get('phone'),
-                'org_ids': org_ids,
-                'profile_id': profile_id,  # Link back to DynamoDB
-                'created_at': datetime.utcnow(),
-                'updated_at': datetime.utcnow()
-            }
-            
-            # Create organization if needed
-            organization_data = None
-            if school_name:
-                org_id = org_ids[0] if org_ids else f"org_{school_name.lower().replace(' ', '_')}"
-                organization_data = {
-                    'sourced_id': org_id,
-                    'status': 'active',
-                    'date_last_modified': datetime.utcnow(),
-                    'model_metadata': {
-                        'school_type': profile.get('school_type', 'school'),
-                        'created_from_profile': profile_id,
-                        'creation_date': datetime.utcnow().isoformat()
-                    },
-                    'name': school_name,
-                    'type': 'school',
-                    'identifier': None,
-                    'parent_id': 'org_district_001'  # Default district
-                }
-            
-            # Execute PostgreSQL operations asynchronously
-            async def create_postgresql_records():
-                db_manager = await get_async_db_manager()
-                try:
-                    async with db_manager.get_async_session() as session:
-                        # Create organization if needed
-                        if organization_data:
-                            org_stmt = insert(Organization).values(**organization_data)
-                            org_stmt = org_stmt.on_conflict_do_update(
-                                index_elements=['sourced_id'],
-                                set_=dict(
-                                    name=org_stmt.excluded.name,
-                                    date_last_modified=org_stmt.excluded.date_last_modified
-                                )
-                            )
-                            await session.execute(org_stmt)
-                            print(f"✅ Created/Updated organization: {school_name}")
-                        
-                        # Create user record
-                        user_stmt = insert(User).values(**user_data)
-                        user_stmt = user_stmt.on_conflict_do_update(
-                            index_elements=['sourced_id'],
-                            set_=dict(
-                                email=user_stmt.excluded.email,
-                                given_name=user_stmt.excluded.given_name,
-                                family_name=user_stmt.excluded.family_name,
-                                role=user_stmt.excluded.role,
-                                date_last_modified=user_stmt.excluded.date_last_modified,
-                                updated_at=user_stmt.excluded.updated_at
-                            )
-                        )
-                        await session.execute(user_stmt)
-                        print(f"✅ Created OneRoster user: {profile.get('email')} ({oneroster_role})")
-                        
-                finally:
-                    await db_manager.close()
-            
-            # Run async PostgreSQL operations
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(create_postgresql_records())
-                print("✅ PostgreSQL OneRoster records created successfully")
-            finally:
-                loop.close()
-                
-        except Exception as e:
-            print(f"⚠️ PostgreSQL OneRoster creation failed (continuing with DynamoDB): {str(e)}")
-            # Don't fail the entire onboarding if PostgreSQL fails
-        
-        # 3. Create Cognito user for passwordless auth
-        if body.get('email'):
-            try:
-                print("Creating Cognito user...")
-                cognito_client = boto3.client('cognito-idp')
-                user_pool_id = os.environ.get('USER_POOL_ID')
-                
-                if user_pool_id:
-                    try:
-                        cognito_client.admin_create_user(
-                            UserPoolId=user_pool_id,
-                            Username=body['email'],
-                            UserAttributes=[
-                                {'Name': 'email', 'Value': body['email']},
-                                {'Name': 'email_verified', 'Value': 'true'},
-                            ],
-                            MessageAction='SUPPRESS'
-                        )
-                        print(f"✅ Cognito user created for {body['email']}")
-                    except cognito_client.exceptions.UsernameExistsException:
-                        print(f"✅ Cognito user already exists for {body['email']}")
-            except Exception as e:
-                print(f"Warning: Could not create Cognito user: {str(e)}")
-        
-        # Return success response with proper CORS headers
-        return create_cors_response(200, {
-            'message': 'Onboarding completed successfully! 🎉',
-            'profile_id': profile_id,
-            'status': 'success',
-            'note': 'Profile created in DynamoDB and PostgreSQL (OneRoster compliant)',
-            'compliance': 'EdFi and OneRoster compliant per database_schema.md',
-            'cors_test': 'CORS headers are working properly!',
-            'invitation_based': bool(invitation_token),
-            'data_received': {
-                'email': body.get('email'),
-                'full_name': body.get('full_name'),
-                'cell_phone': body.get('cell_phone'),
-                'location': body.get('location'),
-                'school_name': body.get('school_name'),
-                'sport': body.get('sport'),
-                'school_type': body.get('school_type'),
-                'role_type': body.get('role_type'),
-                'academic_year': body.get('academic_year')
-            }
-        })
-            
-    except Exception as e:
-        print(f"Error completing onboarding: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return create_cors_response(500, {
-            'error': 'Failed to complete onboarding',
-            'details': str(e)
-        })
-
-
-def validate_and_update_invitation(invitation_token: str, email: str) -> Dict[str, Any]:
-    """Validate invitation token and update status to accepted"""
-    try:
-        dynamodb = boto3.resource('dynamodb')
-        invitations_table_name = os.environ.get('INVITATIONS_TABLE', 'coach-invitations')
-        invitations_table = dynamodb.Table(invitations_table_name)
-        
-        # Find invitation by token
+        # Query by invitation_token (assuming there's a GSI for this)
         response = invitations_table.scan(
             FilterExpression='invitation_token = :token',
             ExpressionAttributeValues={':token': invitation_token}
         )
         
-        items = response.get('Items', [])
-        if not items:
-            return {'valid': False, 'error': 'Invalid invitation token'}
-        
-        invitation = items[0]
-        
-        # Verify email matches
-        if invitation.get('email') != email:
-            return {'valid': False, 'error': 'Email does not match invitation'}
-        
-        # Check if already used
-        if invitation.get('status') == 'accepted':
-            return {'valid': False, 'error': 'Invitation has already been used'}
-        
-        # Update invitation status to accepted
-        invitations_table.update_item(
-            Key={'invitation_id': invitation['invitation_id']},
-            UpdateExpression='SET #status = :status, accepted_at = :timestamp',
-            ExpressionAttributeNames={'#status': 'status'},
-            ExpressionAttributeValues={
-                ':status': 'accepted',
-                ':timestamp': datetime.utcnow().isoformat()
-            }
-        )
-        
-        return {'valid': True}
-        
-    except Exception as e:
-        print(f"Error validating invitation: {str(e)}")
-        return {'valid': False, 'error': str(e)}
-
-
-def handle_health_check(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Health check endpoint"""
-    try:
-        # Test DynamoDB connectivity
-        dynamodb_status = "unknown"
-        try:
-            dynamodb = boto3.resource('dynamodb')
-            profiles_table = dynamodb.Table(os.environ.get('PROFILES_TABLE', 'profiles'))
-            profiles_table.scan(Limit=1)
-            dynamodb_status = "healthy"
-        except Exception as e:
-            print(f"DynamoDB health check failed: {str(e)}")
-            dynamodb_status = "unhealthy"
-        
-        return create_cors_response(200, {
-            'status': 'healthy',
-            'services': {
-                'lambda': 'healthy',
-                'dynamodb': dynamodb_status,
-                'postgresql': 'working_with_asyncpg'
-            },
-            'cors_test': 'CORS headers working! ✅',
-            'environment_vars': {
-                'DB_HOST': os.environ.get('DB_HOST', 'not set'),
-                'PROFILES_TABLE': os.environ.get('PROFILES_TABLE', 'not set'),
-                'USER_POOL_ID': os.environ.get('USER_POOL_ID', 'not set')
-            },
-            'timestamp': datetime.utcnow().isoformat()
-        })
-        
-    except Exception as e:
-        print(f"Health check error: {str(e)}")
-        return create_cors_response(500, {
-            'status': 'unhealthy',
-            'error': str(e),
-            'timestamp': datetime.utcnow().isoformat()
-        })
-
-
-def handle_profile_photo_upload(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Handle profile photo upload to S3 and update DynamoDB"""
-    try:
-        if event.get('httpMethod') != 'POST':
-            return create_cors_response(405, {'error': 'Method not allowed'})
-        
-        # Extract coach email from headers
-        headers = event.get('headers', {})
-        coach_email = headers.get('x-user-email') or headers.get('X-User-Email')
-        
-        if not coach_email:
-            return create_cors_response(401, {'error': 'Authentication required'})
-        
-        body = parse_event_body(event)
-        
-        # Validate required fields
-        if 'photo_data' not in body or 'filename' not in body:
-            return create_cors_response(400, {'error': 'photo_data and filename are required'})
-        
-        photo_data = body['photo_data']
-        filename = body['filename']
-        
-        # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
-        if photo_data.startswith('data:'):
-            photo_data = photo_data.split(',')[1]
-        
-        # Get coach profile to get profile_id
-        dynamodb = boto3.resource('dynamodb')
-        profiles_table = dynamodb.Table(os.environ.get('PROFILES_TABLE', 'profiles-v3-dev'))
-        
-        # Find coach profile by email
-        response = profiles_table.scan(
-            FilterExpression='email = :email',
-            ExpressionAttributeValues={':email': coach_email},
-            Limit=1
-        )
-        
-        if not response.get('Items'):
-            return create_cors_response(404, {'error': 'Coach profile not found'})
-        
-        coach_profile = response['Items'][0]
-        profile_id = coach_profile['profile_id']
-        
-        # Upload photo to S3
-        photo_url = upload_profile_photo_to_s3(photo_data, filename, profile_id)
-        
-        # Update coach profile with photo URL
-        profiles_table.update_item(
-            Key={'profile_id': profile_id},
-            UpdateExpression='SET profile_photo_url = :photo_url, updated_at = :updated_at',
-            ExpressionAttributeValues={
-                ':photo_url': photo_url,
-                ':updated_at': datetime.utcnow().isoformat()
-            }
-        )
-        
-        return create_cors_response(200, {
-            'message': 'Profile photo uploaded successfully',
-            'photo_url': photo_url
-        })
-        
-    except Exception as e:
-        print(f"Error uploading profile photo: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return create_cors_response(500, {'error': 'Failed to upload profile photo'})
-
-
-def upload_profile_photo_to_s3(photo_data: str, filename: str, profile_id: str) -> str:
-    """Upload profile photo to S3 and return CloudFront URL"""
-    try:
-        import base64
-        import uuid
-        
-        # Generate unique filename
-        file_extension = filename.split('.')[-1] if '.' in filename else 'jpg'
-        unique_filename = f"profiles/{profile_id}/photo.{file_extension}"
-        
-        # Decode base64 photo data
-        file_bytes = base64.b64decode(photo_data)
-        
-        # Determine content type
-        content_type_map = {
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'png': 'image/png',
-            'webp': 'image/webp'
-        }
-        content_type = content_type_map.get(file_extension.lower(), 'image/jpeg')
-        
-        # Upload to S3
-        s3_client = boto3.client('s3')
-        bucket_name = os.environ.get('EVENTS_PHOTOS_BUCKET', 'tsa-events-photos-dev-123456789')
-        
-        s3_client.put_object(
-            Bucket=bucket_name,
-            Key=unique_filename,
-            Body=file_bytes,
-            ContentType=content_type,
-            CacheControl='max-age=31536000'  # 1 year cache
-        )
-        
-        # Return CloudFront URL instead of direct S3 URL
-        cloudfront_domain = os.environ.get('CLOUDFRONT_DOMAIN')
-        if cloudfront_domain:
-            return f"https://{cloudfront_domain}/{unique_filename}"
-        else:
-            # Fallback to S3 URL if CloudFront not configured
-            return f"https://{bucket_name}.s3.amazonaws.com/{unique_filename}"
-        
-    except Exception as e:
-        print(f"Error uploading profile photo to S3: {str(e)}")
-        raise
-
-
-def handle_get_profile(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Get coach profile including photo URL"""
-    try:
-        if event.get('httpMethod') != 'GET':
-            return create_cors_response(405, {'error': 'Method not allowed'})
-        
-        # Extract coach email from headers
-        headers = event.get('headers', {})
-        coach_email = headers.get('x-user-email') or headers.get('X-User-Email')
-        
-        if not coach_email:
-            return create_cors_response(401, {'error': 'Authentication required'})
-        
-        # Check if this is a development environment
-        stage = os.environ.get('STAGE', 'dev')
-        
-        if stage == 'dev':
-            # Development mode: Return mock profile data for any email
-            mock_profile = {
-                'profile_id': f"dev-coach-{coach_email.replace('@', '-').replace('.', '-')}",
-                'email': coach_email,
-                'first_name': 'Development',
-                'last_name': 'Coach',
-                'school_name': 'Texas Sports Academy (Dev)',
-                'sport': 'Football',
-                'profile_photo_url': None,
-                'updated_at': datetime.utcnow().isoformat()
-            }
-            
-            return create_cors_response(200, {
-                'profile': mock_profile
+        if not response['Items']:
+            return create_response(400, {
+                'valid': False,
+                'error': 'Invalid or expired invitation token'
             })
         
-        # Production mode: Require actual coach profile
+        invitation = response['Items'][0]
         
-        # Get coach profile
-        dynamodb = boto3.resource('dynamodb')
-        profiles_table = dynamodb.Table(os.environ.get('PROFILES_TABLE', 'profiles-v3-dev'))
+        # Check if invitation is still valid
+        if invitation.get('status') != 'pending':
+            return create_response(400, {
+                'valid': False,
+                'error': f'Invitation is {invitation.get("status", "invalid")}'
+            })
         
-        response = profiles_table.scan(
-            FilterExpression='email = :email',
-            ExpressionAttributeValues={':email': coach_email},
-            Limit=1
+        # Check expiration
+        expires_at = invitation.get('expires_at')
+        if expires_at and datetime.now(timezone.utc).timestamp() > float(expires_at):
+            return create_response(400, {
+                'valid': False,
+                'error': 'Invitation has expired'
+            })
+        
+        # Return comprehensive invitation data
+        invitation_data = {
+            'email': invitation.get('email'),
+            'role': 'coach',  # Default role
+            'first_name': invitation.get('first_name'),
+            'last_name': invitation.get('last_name'),
+            'phone': invitation.get('phone'),
+            'city': invitation.get('city'),
+            'state': invitation.get('state'),
+            'bio': invitation.get('bio'),
+            'message': invitation.get('message'),
+            'full_name': invitation.get('full_name'),
+            'location': invitation.get('location'),
+            'phone_formatted': invitation.get('phone_formatted')
+        }
+        
+        logger.info(f"Validated invitation for coach: {invitation_data['email']}")
+        
+        return create_response(200, {
+            'valid': True,
+            'invitation': invitation_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error validating invitation: {str(e)}")
+        return create_response(500, {'error': 'Failed to validate invitation'})
+
+def get_onboarding_progress(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Get or create onboarding progress for a coach"""
+    
+    try:
+        email = data.get('email')
+        invitation_token = data.get('invitation_token')
+        
+        if not email:
+            return create_response(400, {'error': 'email is required'})
+        
+        # Get existing progress
+        sessions_table = dynamodb.Table(ONBOARDING_SESSIONS_TABLE)
+        
+        try:
+            response = sessions_table.get_item(Key={'session_id': email})
+            
+            if 'Item' in response:
+                progress = response['Item']
+                
+                # Convert DynamoDB types to regular Python types
+                progress = convert_dynamodb_to_dict(progress)
+                
+                return create_response(200, {'progress': progress})
+            else:
+                # Create new progress record
+                new_progress = {
+                    'session_id': email,  # Use email as session_id for now
+                    'user_id': email,
+                    'email': email,
+                    'current_step': 'personal-info',
+                    'completed_steps': [],
+                    'step_data': {},
+                    'last_updated': datetime.now(timezone.utc).isoformat(),
+                    'invitation_based': bool(invitation_token),
+                    'invitation_token': invitation_token,
+                    'expires_at': int((datetime.now(timezone.utc).timestamp() + (7 * 24 * 60 * 60)))  # 7 days TTL
+                }
+                
+                sessions_table.put_item(Item=new_progress)
+                
+                # 🎯 Status Flow: Set to "accepted" when coach STARTS onboarding
+                # - pending: Invitation sent, coach hasn't started onboarding
+                # - accepted: Coach STARTED onboarding but hasn't finished 
+                # - completed: Coach FINISHED onboarding completely (set in complete_onboarding)
+                if invitation_token:
+                    invitation_updated = update_invitation_status_by_token(invitation_token, 'accepted')
+                    if invitation_updated:
+                        logger.info(f"✅ Marked invitation as accepted for session: {email}")
+                    else:
+                        logger.warning(f"⚠️ Failed to update invitation status for token: {invitation_token}")
+                
+                logger.info(f"Created new onboarding progress for: {email}")
+                
+                return create_response(200, {'progress': new_progress})
+                
+        except Exception as e:
+            logger.error(f"Error accessing onboarding sessions table: {str(e)}")
+            return create_response(500, {'error': 'Failed to access progress data'})
+            
+    except Exception as e:
+        logger.error(f"Error getting onboarding progress: {str(e)}")
+        return create_response(500, {'error': 'Failed to get onboarding progress'})
+
+def update_onboarding_progress(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Update onboarding progress and step data"""
+    
+    try:
+        email = data.get('email')
+        current_step = data.get('current_step')
+        step_data = data.get('step_data', {})
+        completed_steps = data.get('completed_steps', [])
+        invitation_token = data.get('invitation_token')
+        
+        if not email or not current_step:
+            return create_response(400, {'error': 'email and current_step are required'})
+        
+        sessions_table = dynamodb.Table(ONBOARDING_SESSIONS_TABLE)
+        
+        # Update the progress record
+        update_expression = """
+            SET current_step = :current_step,
+                step_data = :step_data,
+                completed_steps = :completed_steps,
+                last_updated = :last_updated
+        """
+        
+        expression_values = {
+            ':current_step': current_step,
+            ':step_data': step_data,
+            ':completed_steps': completed_steps,
+            ':last_updated': datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Add invitation_token if provided
+        if invitation_token:
+            update_expression += ", invitation_token = :invitation_token, invitation_based = :invitation_based"
+            expression_values[':invitation_token'] = invitation_token
+            expression_values[':invitation_based'] = True
+        
+        sessions_table.update_item(
+            Key={'session_id': email},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values
+        )
+        
+        logger.info(f"Updated onboarding progress for {email}: step {current_step}")
+        
+        return create_response(200, {'message': 'Progress updated successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error updating onboarding progress: {str(e)}")
+        return create_response(500, {'error': 'Failed to update progress'})
+
+def complete_onboarding(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Complete the onboarding process and create user profile"""
+    
+    try:
+        email = data.get('email')
+        invitation_token = data.get('invitation_token')
+        
+        if not email:
+            return create_response(400, {'error': 'email is required'})
+        
+        # Get the onboarding progress
+        sessions_table = dynamodb.Table(ONBOARDING_SESSIONS_TABLE)
+        progress_response = sessions_table.get_item(Key={'session_id': email})
+        
+        if 'Item' not in progress_response:
+            return create_response(404, {'error': 'Onboarding session not found'})
+        
+        progress = progress_response['Item']
+        step_data = progress.get('step_data', {})
+        
+        # Create user profile in users table
+        users_table = dynamodb.Table(USERS_TABLE)
+        
+        user_profile = {
+            'user_id': f"coach_{email.replace('@', '_').replace('.', '_')}",
+            'email': email,
+            'role': 'coach',
+            
+            # Basic personal information - map frontend field names
+            'first_name': step_data.get('first_name', ''),
+            'last_name': step_data.get('last_name', ''),
+            'middle_name': step_data.get('middle_name', ''),
+            'generation_code_suffix': step_data.get('generation_code_suffix', ''),
+            'phone': step_data.get('cell_phone', step_data.get('phone', '')),  # Frontend uses 'cell_phone'
+            'city': step_data.get('city', ''),
+            'state': step_data.get('state', ''),
+            'bio': step_data.get('bio', ''),
+            
+            # Ed-Fi compliant birth information
+            'birth_date': step_data.get('birth_date', ''),
+            'birth_city': step_data.get('birth_city', ''),
+            'birth_state_abbreviation_descriptor': step_data.get('birth_state_abbreviation_descriptor', ''),
+            
+            # Ed-Fi compliant demographic information
+            'gender': step_data.get('gender', ''),
+            'hispanic_latino_ethnicity': step_data.get('hispanic_latino_ethnicity'),
+            'races': step_data.get('races', []),
+            
+            # TSA-specific fields - map frontend field names
+            'experience': step_data.get('years_experience', step_data.get('experience', '')),  # Frontend uses 'years_experience'
+            'certifications': step_data.get('certifications', []),
+            'specialties': step_data.get('specializations', step_data.get('specialties', [])),  # Frontend uses 'specializations'
+            'emergency_contact': step_data.get('emergency_contact', ''),
+            'role_type': step_data.get('role_type', 'coach'),  # Add role_type field
+            'certification_level': step_data.get('certification_level', ''),  # Add certification_level
+            
+            # School/organizational information (Ed-Fi compliant) - map frontend field names
+            'school_name': step_data.get('school_name', ''),
+            'school_type': step_data.get('school_type', ''),
+            'grade_levels': step_data.get('grade_levels_served', step_data.get('grade_levels', [])),  # Frontend uses 'grade_levels_served'
+            'school_id': step_data.get('school_id'),  # Ed-Fi school identifier
+            'state_organization_id': step_data.get('state_organization_id', ''),
+            'local_education_agency_id': step_data.get('local_education_agency_id'),
+            'operational_status_descriptor': step_data.get('operational_status_descriptor', 'active'),
+            'charter_status_descriptor': step_data.get('charter_status_descriptor', ''),
+            
+            # Additional school fields from frontend
+            'school_street': step_data.get('school_street', ''),
+            'school_city': step_data.get('school_city', ''),
+            'school_state': step_data.get('school_state', ''),
+            'school_zip': step_data.get('school_zip', ''),
+            'school_phone': step_data.get('school_phone', ''),
+            'website': step_data.get('website', ''),
+            'has_physical_location': step_data.get('has_physical_location', True),
+            'academic_year': step_data.get('academic_year', '2024-2025'),
+            
+            # Sports and focus
+            'sport': step_data.get('sport', ''),
+            'football_type': step_data.get('football_type', ''),
+            'school_categories': step_data.get('school_categories', []),
+            'program_focus': step_data.get('program_focus', []),
+            
+            # Student planning
+            'estimated_student_count': step_data.get('estimated_student_count', 0),
+            'student_grade_levels': step_data.get('student_grade_levels', []),
+            'enrollment_capacity': step_data.get('enrollment_capacity', 100),
+            'has_current_students': step_data.get('has_current_students', False),
+            'current_student_details': step_data.get('current_student_details', ''),
+            
+            # Compliance and agreements
+            'platform_agreement': step_data.get('platform_agreement', False),
+            'microschool_agreement': step_data.get('microschool_agreement', False),
+            'background_check_status': step_data.get('background_check_status', 'pending'),
+            
+            # OneRoster compliant organizational data
+            'org_ids': step_data.get('org_ids', []),
+            'enabled_user': step_data.get('enabled_user', True),
+            'sourced_id': f"coach_{email.replace('@', '_').replace('.', '_')}",  # OneRoster ID
+            'username': email,  # OneRoster username
+            
+            # System fields
+            'onboarding_completed': True,
+            'onboarding_completed_at': datetime.now(timezone.utc).isoformat(),
+            'invitation_based': progress.get('invitation_based', False),
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Save user profile
+        users_table.put_item(Item=user_profile)
+        
+        # ✅ Register user with auth service for magic link compatibility
+        auth_registration_success = False
+        try:
+            logger.info(f"🔐 Registering user with auth service: {email}")
+            auth_registration_success = register_user_with_auth_service(user_profile)
+            if auth_registration_success:
+                logger.info(f"✅ Successfully registered {email} with auth service")
+            else:
+                logger.warning(f"⚠️ Failed to register {email} with auth service")
+        except Exception as e:
+            logger.warning(f"⚠️ Error registering user with auth service: {str(e)}")
+            # Don't fail the onboarding if auth registration fails
+        
+        # 🎯 IMPORTANT: Status Flow Clarification
+        # - pending: Invitation sent, coach hasn't started onboarding
+        # - accepted: Coach STARTED onboarding but hasn't finished 
+        # - completed: Coach FINISHED onboarding completely
+        
+        # Mark invitation as COMPLETED when onboarding finishes
+        if invitation_token:
+            try:
+                # Use the helper function to properly update invitation status
+                invitation_updated = update_invitation_status_by_token(invitation_token, 'completed')
+                if invitation_updated:
+                    logger.info(f"✅ Marked invitation as completed for: {email}")
+                else:
+                    logger.warning(f"⚠️ Failed to update invitation status to completed for token: {invitation_token}")
+            except Exception as e:
+                logger.warning(f"Could not update invitation status to completed: {str(e)}")
+        
+        # Update onboarding session to completed
+        sessions_table.update_item(
+            Key={'session_id': email},
+            UpdateExpression="SET current_step = :step, completed_steps = :completed, onboarding_completed = :completed_flag",
+            ExpressionAttributeValues={
+                ':step': 'complete',
+                ':completed': progress.get('completed_steps', []) + ['complete'],
+                ':completed_flag': True
+            }
+        )
+        
+        logger.info(f"Completed onboarding for coach: {email}")
+        
+        return create_response(200, {
+            'message': 'Onboarding completed successfully',
+            'profile_id': user_profile['user_id'],
+            'status': 'completed',
+            'invitation_based': progress.get('invitation_based', False)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error completing onboarding: {str(e)}")
+        return create_response(500, {'error': 'Failed to complete onboarding'})
+
+def health_check() -> Dict[str, Any]:
+    """Health check endpoint"""
+    return create_response(200, {
+        'status': 'healthy',
+        'service': 'coach-onboarding',
+        'timestamp': datetime.now(timezone.utc).isoformat()
+    })
+
+def create_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a standardized HTTP response with CORS headers"""
+    return {
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+        },
+        'body': json.dumps(body, default=str)
+    }
+
+def convert_dynamodb_to_dict(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert DynamoDB item to regular Python dict"""
+    def convert_value(value):
+        if isinstance(value, Decimal):
+            return float(value)
+        elif isinstance(value, dict):
+            return {k: convert_value(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [convert_value(v) for v in value]
+        else:
+            return value
+    
+    return convert_value(item) 
+
+def update_invitation_status_by_token(invitation_token: str, status: str) -> bool:
+    """Update invitation status by finding invitation by token"""
+    try:
+        if not invitation_token:
+            return False
+            
+        invitations_table = dynamodb.Table(INVITATIONS_TABLE)
+        
+        # Find invitation by token using scan (since token is not the partition key)
+        response = invitations_table.scan(
+            FilterExpression='invitation_token = :token',
+            ExpressionAttributeValues={':token': invitation_token}
         )
         
         if not response.get('Items'):
-            return create_cors_response(404, {'error': 'Coach profile not found'})
+            logger.warning(f"No invitation found with token: {invitation_token}")
+            return False
         
-        coach_profile = response['Items'][0]
+        invitation = response['Items'][0]
+        invitation_id = invitation['invitation_id']
         
-        # Return profile data including photo URL
-        return create_cors_response(200, {
-            'profile': {
-                'profile_id': coach_profile.get('profile_id'),
-                'email': coach_profile.get('email'),
-                'first_name': coach_profile.get('first_name'),
-                'last_name': coach_profile.get('last_name'),
-                'school_name': coach_profile.get('school_name'),
-                'sport': coach_profile.get('sport'),
-                'profile_photo_url': coach_profile.get('profile_photo_url'),
-                'updated_at': coach_profile.get('updated_at')
+        # Update the invitation status
+        invitations_table.update_item(
+            Key={'invitation_id': invitation_id},
+            UpdateExpression='SET #status = :status, accepted_at = :accepted_at, updated_at = :updated_at',
+            ExpressionAttributeNames={'#status': 'status'},
+            ExpressionAttributeValues={
+                ':status': status,
+                ':accepted_at': datetime.now(timezone.utc).isoformat(),
+                ':updated_at': datetime.now(timezone.utc).isoformat()
             }
-        })
+        )
+        
+        logger.info(f"Updated invitation {invitation_id} status to {status}")
+        return True
         
     except Exception as e:
-        print(f"Error getting coach profile: {str(e)}")
-        return create_cors_response(500, {'error': 'Failed to get profile'})
+        logger.error(f"Error updating invitation status: {str(e)}")
+        return False
 
-
-def handle_onboarding_progress(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Handle onboarding progress tracking"""
+def register_user_with_auth_service(user_profile: Dict[str, Any]) -> bool:
+    """Register user with auth service Cognito user pool"""
     try:
-        return create_cors_response(200, {
-            'message': 'Progress tracking not implemented yet',
-            'progress': {'current_step': 1, 'total_steps': 5}
-        })
+        # Get auth service configuration from environment
+        auth_user_pool_id = os.environ.get('AUTH_USER_POOL_ID')
+        if not auth_user_pool_id:
+            logger.warning("AUTH_USER_POOL_ID not configured, skipping auth service registration")
+            return False
+        
+        email = user_profile.get('email')
+        if not email:
+            logger.error("No email in user profile, cannot register with auth service")
+            return False
+        
+        # Initialize Cognito client
+        cognito_client = boto3.client('cognito-idp')
+        
+        # Check if user already exists
+        try:
+            cognito_client.admin_get_user(
+                UserPoolId=auth_user_pool_id,
+                Username=email
+            )
+            logger.info(f"User {email} already exists in auth service")
+            return True  # Consider this a success
+        except cognito_client.exceptions.UserNotFoundException:
+            # User doesn't exist, create them
+            pass
+        
+        # Prepare user attributes
+        user_attributes = [
+            {'Name': 'email', 'Value': email},
+            {'Name': 'email_verified', 'Value': 'true'},
+            {'Name': 'custom:user_role', 'Value': 'coach'}
+        ]
+        
+        # Add name attributes if available
+        first_name = user_profile.get('first_name', '').strip()
+        last_name = user_profile.get('last_name', '').strip()
+        if first_name:
+            user_attributes.append({'Name': 'given_name', 'Value': first_name})
+        if last_name:
+            user_attributes.append({'Name': 'family_name', 'Value': last_name})
+        
+        # Add phone if available - format for E.164 compatibility
+        phone = user_profile.get('phone', '').strip()
+        if phone:
+            formatted_phone = format_phone_for_cognito(phone)
+            if formatted_phone:
+                user_attributes.append({'Name': 'phone_number', 'Value': formatted_phone})
+                logger.info(f"Formatted phone {phone} -> {formatted_phone} for Cognito")
+            else:
+                logger.warning(f"Could not format phone number for Cognito: {phone}")
+        
+        # Create user in auth service Cognito
+        cognito_client.admin_create_user(
+            UserPoolId=auth_user_pool_id,
+            Username=email,
+            UserAttributes=user_attributes,
+            MessageAction='SUPPRESS'  # Don't send Cognito welcome email
+        )
+        
+        logger.info(f"Successfully created user {email} in auth service")
+        return True
+        
     except Exception as e:
-        print(f"Error in progress handler: {str(e)}")
-        return create_cors_response(500, {'error': 'Failed to get progress'})
+        logger.error(f"Error registering user with auth service: {str(e)}")
+        return False
 
-
-def handle_save_progress(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Handle saving onboarding progress"""
-    try:
-        return create_cors_response(200, {
-            'message': 'Progress saved (placeholder implementation)'
-        })
-    except Exception as e:
-        print(f"Error saving progress: {str(e)}")
-        return create_cors_response(500, {'error': 'Failed to save progress'})
-
-
-def handle_get_progress(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Handle getting saved progress"""
-    try:
-        return create_cors_response(200, {
-            'progress': {'current_step': 1, 'completed': False}
-        })
-    except Exception as e:
-        print(f"Error getting progress: {str(e)}")
-        return create_cors_response(500, {'error': 'Failed to get progress'})
+def format_phone_for_cognito(phone: str) -> str:
+    """Format phone number to E.164 format for Cognito compatibility"""
+    import re
+    
+    if not phone:
+        return ""
+    
+    # Remove all non-digit characters
+    digits_only = re.sub(r'\D', '', phone)
+    
+    # Handle different US phone number formats
+    if len(digits_only) == 10:
+        # 10 digits - add US country code
+        return f"+1{digits_only}"
+    elif len(digits_only) == 11 and digits_only.startswith('1'):
+        # 11 digits starting with 1 - add plus sign
+        return f"+{digits_only}"
+    elif phone.startswith('+') and len(digits_only) >= 10:
+        # Already has plus - validate format
+        return phone if re.match(r'^\+\d{10,15}$', phone) else ""
+    else:
+        # Invalid format - return empty to skip phone attribute
+        logger.warning(f"Invalid phone format for Cognito: {phone} (digits: {digits_only})")
+        return "" 

@@ -7,45 +7,70 @@ interface Invitation {
   invitation_id: string;
   invitation_token: string;
   email: string;
-  role: string;
-  school_name: string;
-  school_type?: string;
-  sport?: string;
-  status: 'pending' | 'accepted' | 'cancelled' | 'expired';
+  first_name: string;
+  last_name: string;
+  phone: string;
+  city: string;
+  state: string;
+  bio?: string;
   message?: string;
+  status: 'pending' | 'accepted' | 'cancelled' | 'expired' | 'completed';
   created_at: string;
   expires_at: number;
   created_by: string;
   accepted_at?: string;
   cancelled_at?: string;
   last_sent_at?: string;
+  // Generated fields
+  full_name?: string;
+  location?: string;
+  phone_formatted?: string;
 }
 
 export default function InvitationsPage() {
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<string>('all')
+  const [filter, setFilter] = useState('all')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [selectedInvitations, setSelectedInvitations] = useState<string[]>([])
-  const [bulkActionLoading, setBulkActionLoading] = useState(false)
 
-  // Simplified form state - only email and message
+  // Updated form state with COACH_ONBOARDING_INTEGRATION fields
   const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
     email: '',
+    phone: '',
+    city: '',
+    state: '',
+    bio: '',
     message: ''
   })
 
-  const fetchInvitations = async (statusFilter?: string) => {
+  const fetchInvitations = async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await adminAPI.getInvitations(statusFilter === 'all' ? undefined : statusFilter)
+      // Always fetch ALL invitations, don't filter on backend
+      const response = await adminAPI.getInvitations()
       
       // Handle null response (from 401 logout)
       if (response !== null) {
-        setInvitations(response.invitations || [])
+        // Filter out any malformed invitations with missing required fields
+        const validInvitations = (response.invitations || []).filter((inv: Invitation) => 
+          inv && 
+          inv.email && 
+          inv.invitation_id && 
+          inv.status
+        )
+        
+        setInvitations(validInvitations)
+        
+        // Log warning if any invalid invitations were filtered out
+        const invalidCount = (response.invitations || []).length - validInvitations.length
+        if (invalidCount > 0) {
+          console.warn(`Filtered out ${invalidCount} invalid invitation(s) with missing required fields`)
+        }
       }
     } catch (err) {
       console.error('Failed to fetch invitations:', err)
@@ -56,14 +81,14 @@ export default function InvitationsPage() {
   }
 
   useEffect(() => {
-    fetchInvitations(filter)
-  }, [filter])
+    fetchInvitations()
+  }, [])
 
   // Check for duplicate email
   const isDuplicateEmail = (email: string): boolean => {
     if (!email || email.trim() === '') return false
     return invitations.some(inv => 
-      inv.email.toLowerCase() === email.toLowerCase() && 
+      inv.email && inv.email.toLowerCase() === email.toLowerCase() && 
       inv.status === 'pending'
     )
   }
@@ -80,10 +105,16 @@ export default function InvitationsPage() {
     try {
       setCreating(true)
       
-      // Create invitation with ONLY email and message - no complex fields
+      // Create invitation with comprehensive coach information
       const invitationData = {
-        email: formData.email,
-        message: formData.message || 'Welcome to Texas Sports Academy Coach Portal! Please complete your application to get started.'
+        first_name: formData.first_name.trim(),
+        last_name: formData.last_name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        city: formData.city.trim(),
+        state: formData.state.trim(),
+        bio: formData.bio.trim(),
+        message: formData.message.trim() || 'Welcome to Texas Sports Academy Coach Portal! Please complete your onboarding to get started.'
       }
       
       const result = await adminAPI.createInvitation(invitationData)
@@ -92,11 +123,17 @@ export default function InvitationsPage() {
       if (result !== null) {
         // Reset form and refresh data
         setFormData({
+        first_name: '',
+        last_name: '',
         email: '',
+        phone: '',
+        city: '',
+        state: '',
+        bio: '',
         message: ''
       })
       setShowCreateForm(false)
-        await fetchInvitations(filter)
+        await fetchInvitations()
       alert('Invitation sent successfully!')
       }
     } catch (err) {
@@ -104,7 +141,7 @@ export default function InvitationsPage() {
       if (err instanceof Error && err.message.includes('Email address is not verified')) {
         alert('Invitation created but email sending is temporarily disabled. The coach will need to be contacted manually.')
         // Refresh the list anyway since invitation was created
-        await fetchInvitations(filter)
+        await fetchInvitations()
         setShowCreateForm(false)
       } else if (err instanceof Error && err.message.includes('already exists')) {
         alert('An active invitation already exists for this email address.')
@@ -122,7 +159,7 @@ export default function InvitationsPage() {
       
       // Handle null response (from 401 logout)
       if (result !== null) {
-        await fetchInvitations(filter)
+        await fetchInvitations()
         alert('Invitation resent successfully')
       }
     } catch (err) {
@@ -135,64 +172,29 @@ export default function InvitationsPage() {
     }
   }
 
-  const handleDeleteInvitation = async (invitationId: string) => {
-    if (!confirm('Are you sure you want to permanently delete this invitation? This action cannot be undone.')) return
+  const handleCancelInvitation = async (invitationId: string) => {
+    if (!confirm('Are you sure you want to cancel this invitation? The coach will no longer be able to use this invitation link.')) return
 
     try {
-      const result = await adminAPI.deleteInvitation(invitationId)
+      // Use DELETE method as expected by the backend (cancel_invitation function)
+      const result = await adminAPI.authenticatedRequest(`${adminAPI.getBaseUrl('admin')}/admin/invitations/${invitationId}`, {
+        method: 'DELETE'
+      })
       
       // Handle null response (from 401 logout)
       if (result !== null) {
-        // Remove invitation from local state
-        setInvitations(invitations.filter(inv => inv.invitation_id !== invitationId))
-        // Also remove from selected if it was selected
-        setSelectedInvitations(selectedInvitations.filter(id => id !== invitationId))
+        // Update the invitation status in local state instead of removing it
+        setInvitations(invitations.map(inv => 
+          inv.invitation_id === invitationId 
+            ? { ...inv, status: 'cancelled' as const, cancelled_at: new Date().toISOString() }
+            : inv
+        ))
+        
+        alert('Invitation cancelled successfully')
       }
     } catch (err) {
-      console.error('Failed to delete invitation:', err)
-      alert(err instanceof Error ? err.message : 'Failed to delete invitation')
-    }
-  }
-
-  // Bulk actions
-  const handleSelectAll = () => {
-    const pendingInvitations = filteredInvitations
-      .filter(inv => inv.status === 'pending')
-      .map(inv => inv.invitation_id)
-    
-    if (selectedInvitations.length === pendingInvitations.length) {
-      setSelectedInvitations([])
-    } else {
-      setSelectedInvitations(pendingInvitations)
-    }
-  }
-
-  const handleSelectInvitation = (invitationId: string) => {
-    setSelectedInvitations(prev => 
-      prev.includes(invitationId)
-        ? prev.filter(id => id !== invitationId)
-        : [...prev, invitationId]
-    )
-  }
-
-  const handleBulkResend = async () => {
-    if (selectedInvitations.length === 0) return
-    
-    if (!confirm(`Are you sure you want to resend ${selectedInvitations.length} invitation(s)?`)) return
-    
-    setBulkActionLoading(true)
-    try {
-      await Promise.all(
-        selectedInvitations.map(id => adminAPI.resendInvitation(id))
-      )
-      setSelectedInvitations([])
-      await fetchInvitations(filter)
-      alert(`${selectedInvitations.length} invitation(s) resent successfully`)
-    } catch (err) {
-      console.error('Failed to resend invitations:', err)
-      alert('Some invitations could not be resent. Please try again.')
-    } finally {
-      setBulkActionLoading(false)
+      console.error('Failed to cancel invitation:', err)
+      alert(err instanceof Error ? err.message : 'Failed to cancel invitation')
     }
   }
 
@@ -206,14 +208,25 @@ export default function InvitationsPage() {
     }
   }
 
+  const getStatusDisplayText = (status: string) => {
+    switch (status) {
+      case 'accepted': return 'Opened'
+      default: return status.charAt(0).toUpperCase() + status.slice(1)
+    }
+  }
+
   const formatDate = (timestamp: string | number) => {
     const date = new Date(typeof timestamp === 'string' ? timestamp : timestamp * 1000)
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString()
   }
 
   const filteredInvitations = invitations.filter(invitation => {
-    if (filter === 'all') return true
+    // Apply status filter (if not 'all')
+    if (filter !== 'all') {
     return invitation.status === filter
+    }
+    
+    return true
   })
 
   const pendingInvitations = filteredInvitations.filter(inv => inv.status === 'pending')
@@ -243,7 +256,7 @@ export default function InvitationsPage() {
           <h2 className="text-lg font-medium text-red-800 mb-2">Error Loading Invitations</h2>
           <p className="text-red-600">{error}</p>
           <button 
-            onClick={() => fetchInvitations(filter)} 
+            onClick={() => fetchInvitations()} 
             className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
           >
             Retry
@@ -272,13 +285,13 @@ export default function InvitationsPage() {
           </button>
       </div>
 
-        {/* Filter Tabs */}
+        {/* Single Tab System */}
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
             {[
-              { key: 'all', label: 'All', count: invitations.length },
+                { key: 'all', label: 'All Invitations', count: invitations.length },
               { key: 'pending', label: 'Pending', count: invitations.filter(i => i.status === 'pending').length },
-              { key: 'accepted', label: 'Accepted', count: invitations.filter(i => i.status === 'accepted').length },
+              { key: 'accepted', label: 'Opened', count: invitations.filter(i => i.status === 'accepted').length },
               { key: 'cancelled', label: 'Cancelled', count: invitations.filter(i => i.status === 'cancelled').length },
               { key: 'expired', label: 'Expired', count: invitations.filter(i => i.status === 'expired').length }
             ].map((tab) => (
@@ -301,13 +314,45 @@ export default function InvitationsPage() {
       {/* Simplified Create Invitation Modal */}
       {showCreateForm && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Send Coach Invitation</h3>
               <p className="text-sm text-gray-600 mb-4">
-                The coach will receive an email invitation to join Texas Sports Academy and complete their application.
+                Collect the coach's basic information to create a personalized invitation and streamline their onboarding experience.
               </p>
               <form onSubmit={handleCreateInvitation} className="space-y-4">
+                {/* First and Last Name Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      First Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({...formData, first_name: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="John"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({...formData, last_name: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Doe"
+                    />
+                  </div>
+                </div>
+
+                {/* Email and Phone Row */}
+                <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Email Address *
@@ -325,8 +370,67 @@ export default function InvitationsPage() {
                       An active invitation already exists for this email
                     </p>
                   )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Phone *
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      value={formData.phone}
+                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="(555) 555-5555"
+                    />
+                  </div>
                 </div>
 
+                {/* City and State Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      City *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.city}
+                      onChange={(e) => setFormData({...formData, city: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Austin"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      State *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.state}
+                      onChange={(e) => setFormData({...formData, state: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="TX"
+                    />
+                  </div>
+                </div>
+
+                {/* Bio - Full Width */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Bio (Optional)
+                  </label>
+                  <textarea
+                    value={formData.bio}
+                    onChange={(e) => setFormData({...formData, bio: e.target.value})}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Tell us about your coaching experience..."
+                  />
+                </div>
+
+                {/* Admin Message - Full Width */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Personal Message (Optional)
@@ -334,16 +438,10 @@ export default function InvitationsPage() {
                   <textarea
                     value={formData.message}
                     onChange={(e) => setFormData({...formData, message: e.target.value})}
-                    rows={3}
+                    rows={2}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Welcome to Texas Sports Academy! We're excited to have you join our coaching team..."
                   />
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-md">
-                  <p className="text-sm text-gray-600">
-                    <strong>Note:</strong> The coach will complete their profile (name, phone, location) and school setup during the onboarding process.
-                  </p>
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4">
@@ -369,53 +467,8 @@ export default function InvitationsPage() {
         </div>
       )}
 
-      {/* Bulk Actions Bar */}
-      {selectedInvitations.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <span className="text-sm font-medium text-blue-900">
-                {selectedInvitations.length} invitation(s) selected
-              </span>
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={handleBulkResend}
-                disabled={bulkActionLoading}
-                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {bulkActionLoading ? 'Processing...' : 'Resend Selected'}
-              </button>
-              <button
-                onClick={() => setSelectedInvitations([])}
-                className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400"
-              >
-                Clear Selection
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Invitations List */}
       <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium text-gray-900">
-              {filter === 'all' ? 'All Invitations' : `${filter.charAt(0).toUpperCase() + filter.slice(1)} Invitations`}
-              <span className="text-gray-500 text-sm ml-2">({filteredInvitations.length})</span>
-            </h2>
-            {pendingInvitations.length > 0 && (
-              <button
-                onClick={handleSelectAll}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                {selectedInvitations.length === pendingInvitations.length ? 'Deselect All' : 'Select All Pending'}
-              </button>
-            )}
-          </div>
-        </div>
-
         {filteredInvitations.length === 0 ? (
           <div className="p-6 text-center">
             <div className="text-gray-400 mb-2">No invitations found</div>
@@ -434,18 +487,10 @@ export default function InvitationsPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <input
-                        type="checkbox"
-                        checked={selectedInvitations.length === pendingInvitations.length && pendingInvitations.length > 0}
-                        onChange={handleSelectAll}
-                        className="rounded border-gray-300"
-                      />
+                      Coach Details
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Coach Email
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      School
+                      Location
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
@@ -462,30 +507,22 @@ export default function InvitationsPage() {
                   {filteredInvitations.map((invitation) => (
                     <tr key={invitation.invitation_id}>
                       <td className="px-4 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedInvitations.includes(invitation.invitation_id)}
-                          onChange={() => handleSelectInvitation(invitation.invitation_id)}
-                          disabled={invitation.status !== 'pending'}
-                          className="rounded border-gray-300"
-                        />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="text-sm font-medium text-gray-900">{invitation.email}</div>
-                        {invitation.sport && invitation.sport !== 'general' && (
-                          <div className="text-sm text-gray-500">{invitation.sport}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {invitation.full_name || `${invitation.first_name || ''} ${invitation.last_name || ''}`.trim()}
+                        </div>
+                        <div className="text-sm text-gray-500">{invitation.email || 'No email'}</div>
+                        {invitation.phone_formatted && (
+                          <div className="text-sm text-gray-500">{invitation.phone_formatted}</div>
                         )}
                       </td>
                       <td className="px-4 py-4">
-                        <div className="text-sm text-gray-900">{invitation.school_name}</div>
-                        {invitation.school_type && invitation.school_type !== 'combined' && (
-                          <div className="text-sm text-gray-500">{invitation.school_type}</div>
-                        )}
-                        <div className="text-sm text-gray-500">{invitation.role ? invitation.role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not specified'}</div>
+                        <div className="text-sm text-gray-900">
+                          {invitation.location || `${invitation.city || ''}, ${invitation.state || ''}`.trim().replace(/^,\s*|,\s*$/g, '')}
+                        </div>
                       </td>
                       <td className="px-4 py-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(invitation.status)}`}>
-                          {invitation.status}
+                          {getStatusDisplayText(invitation.status)}
                         </span>
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-500">
@@ -501,14 +538,20 @@ export default function InvitationsPage() {
                               >
                                 Resend
                               </button>
+                              <button
+                                onClick={() => handleCancelInvitation(invitation.invitation_id)}
+                                className="text-red-600 hover:text-red-900 text-sm font-medium"
+                              >
+                                Cancel
+                              </button>
                             </>
                           )}
-                          <button
-                            onClick={() => handleDeleteInvitation(invitation.invitation_id)}
-                            className="text-red-600 hover:text-red-900 text-sm font-medium"
-                          >
-                            Delete
-                          </button>
+                          {invitation.status !== 'pending' && invitation.status !== 'cancelled' && (
+                            <span className="text-gray-400 text-sm">No actions available</span>
+                          )}
+                          {invitation.status === 'cancelled' && (
+                            <span className="text-gray-500 text-sm italic">Cancelled</span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -523,17 +566,13 @@ export default function InvitationsPage() {
                 <div key={invitation.invitation_id} className="bg-white border rounded-lg p-4 shadow-sm">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center space-x-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedInvitations.includes(invitation.invitation_id)}
-                        onChange={() => handleSelectInvitation(invitation.invitation_id)}
-                        disabled={invitation.status !== 'pending'}
-                        className="rounded border-gray-300"
-                      />
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{invitation.email}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {invitation.full_name || `${invitation.first_name || ''} ${invitation.last_name || ''}`.trim()}
+                        </div>
+                        <div className="text-sm text-gray-500">{invitation.email || 'No email'}</div>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(invitation.status)}`}>
-                          {invitation.status}
+                          {getStatusDisplayText(invitation.status)}
                         </span>
                       </div>
                     </div>
@@ -541,9 +580,13 @@ export default function InvitationsPage() {
                   
                   <div className="grid grid-cols-1 gap-3 mb-3">
                     <div>
-                      <div className="text-xs font-medium text-gray-500">School & Role</div>
-                      <div className="text-sm text-gray-900">{invitation.school_name}</div>
-                      <div className="text-sm text-gray-500">{invitation.role ? invitation.role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not specified'}</div>
+                      <div className="text-xs font-medium text-gray-500">Location & Phone</div>
+                      <div className="text-sm text-gray-900">
+                        {invitation.location || `${invitation.city || ''}, ${invitation.state || ''}`.trim().replace(/^,\s*|,\s*$/g, '')}
+                      </div>
+                      {invitation.phone_formatted && (
+                        <div className="text-sm text-gray-500">{invitation.phone_formatted}</div>
+                      )}
                     </div>
                     <div>
                       <div className="text-xs font-medium text-gray-500">Created</div>
@@ -560,14 +603,20 @@ export default function InvitationsPage() {
                         >
                           Resend
                         </button>
+                        <button
+                          onClick={() => handleCancelInvitation(invitation.invitation_id)}
+                          className="text-red-600 hover:text-red-900 text-sm font-medium"
+                        >
+                          Cancel
+                        </button>
                       </>
                     )}
-                    <button
-                      onClick={() => handleDeleteInvitation(invitation.invitation_id)}
-                      className="text-red-600 hover:text-red-900 text-sm font-medium"
-                    >
-                      Delete
-                    </button>
+                    {invitation.status !== 'pending' && invitation.status !== 'cancelled' && (
+                      <span className="text-gray-400 text-sm">No actions available</span>
+                    )}
+                    {invitation.status === 'cancelled' && (
+                      <span className="text-gray-500 text-sm italic">Cancelled</span>
+                    )}
                   </div>
                 </div>
               ))}

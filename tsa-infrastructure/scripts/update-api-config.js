@@ -44,8 +44,8 @@ function getCurrentApiUrls(stage = 'dev') {
     getStackOutput(`tsa-coach-backend-${stage}`, 'CoachPortalServiceCoachOnboardingAPIEndpoint2ED358FF') ||
     getStackOutput(`tsa-coach-backend-${stage}`, 'OnboardingAPIUrl');
   
-  // Passwordless auth URL is stable
-  const passwordlessAuthUrl = 'https://wlcmxb3pc8.execute-api.us-east-1.amazonaws.com/v1';
+  // Passwordless auth URL is stable (updated to v1 stage)
+  const passwordlessAuthUrl = 'https://hcp1htntxf.execute-api.us-east-2.amazonaws.com/api/';
   
   return {
     adminApi: adminApiUrl,

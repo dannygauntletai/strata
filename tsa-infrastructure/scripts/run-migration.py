@@ -31,7 +31,7 @@ class PostgreSQLMigrator:
     def find_database_secret(self) -> str:
         """Find the database secret ARN from existing Lambda functions"""
         try:
-            lambda_client = boto3.client('lambda', region_name='us-east-1')
+            lambda_client = boto3.client('lambda', region_name='us-east-2')
             
             # List functions to find coach-related ones
             functions = lambda_client.list_functions()
@@ -56,11 +56,11 @@ class PostgreSQLMigrator:
                         continue
             
             # Fallback: try common secret names
-            secrets_client = boto3.client('secretsmanager', region_name='us-east-1')
+            secrets_client = boto3.client('secretsmanager', region_name='us-east-2')
             common_names = [
                 'tsa-coach/database-dev',
                 'rds-db-credentials/cluster-tsa-coach-portal-dev',
-                'arn:aws:secretsmanager:us-east-1:164722634547:secret:tsa-coach/database-dev'
+                'arn:aws:secretsmanager:us-east-2:164722634547:secret:tsa-coach/database-dev'
             ]
             
             for secret_name in common_names:
@@ -87,13 +87,13 @@ class PostgreSQLMigrator:
                     return False
             
             # Get database credentials
-            secrets_client = boto3.client('secretsmanager', region_name='us-east-1')
+            secrets_client = boto3.client('secretsmanager', region_name='us-east-2')
             response = secrets_client.get_secret_value(SecretId=self.secret_arn)
             secret_data = json.loads(response['SecretString'])
             
             # Connect to PostgreSQL
             self.db_connection = psycopg2.connect(
-                host=secret_data.get('host', 'tsa-coach-portal-dev.c4jmsiuauast.us-east-1.rds.amazonaws.com'),
+                host=secret_data.get('host', 'tsa-coach-portal-dev.c4jmsiuauast.us-east-2.rds.amazonaws.com'),
                 database=secret_data.get('dbname', 'coach_portal'),
                 user=secret_data.get('username'),
                 password=secret_data.get('password'),

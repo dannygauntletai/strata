@@ -1,27 +1,23 @@
 /**
  * Environment Configuration for TSA Admin Portal
- * Uses build-time generated configuration from SSM Parameter Store
+ * Uses environment variables populated at build time by scripts
+ * Single source of truth - no browser SSM calls
  */
 
 export type Environment = 'development' | 'staging' | 'production'
 
 export interface ApiEndpoints {
-  adminApi: string;
-  coachApi: string;
-  passwordlessAuth: string;
+  adminApi: string
+  coachApi: string
+  passwordlessAuth: string
 }
 
 export interface EnvironmentConfig {
   stage: string
   environment: Environment
   apiEndpoints: ApiEndpoints
-  admin: {
-    email: string
-  }
   features: {
     debugMode: boolean
-    showPerformanceMetrics: boolean
-    enableAnalytics: boolean
   }
   app: {
     name: string
@@ -29,148 +25,144 @@ export interface EnvironmentConfig {
   }
 }
 
-// Load generated configuration (created by build-time script)
-function loadGeneratedConfig(): ApiEndpoints {
-  try {
-    // Try to import the generated config file
-    const generatedConfig = require('./generated-config.json');
-    console.log('✅ Using build-time generated configuration from SSM');
-    return generatedConfig.endpoints;
-  } catch (error) {
-    console.warn('⚠️  Generated config not found, using fallback configuration');
-    
-    // Fallback configuration with correct endpoints
-    const fallbackEndpoints: ApiEndpoints = {
-      // UPDATED: Use correct Admin API endpoint from deployment
-      adminApi: 'https://gt87xbmjcj.execute-api.us-east-1.amazonaws.com/prod',
-      coachApi: 'https://deibk5wgx1.execute-api.us-east-1.amazonaws.com/prod',
-      passwordlessAuth: 'https://wlcmxb3pc8.execute-api.us-east-1.amazonaws.com/v1',
-    };
-    
-    return fallbackEndpoints;
+/**
+ * Get current environment from NEXT_PUBLIC_ENVIRONMENT
+ */
+function getCurrentEnvironment(): Environment {
+  const envVar = process.env.NEXT_PUBLIC_ENVIRONMENT as Environment
+  return (envVar === 'production' || envVar === 'staging') ? envVar : 'development'
+}
+
+/**
+ * Get current stage
+ */
+function getStage(): string {
+  const env = getCurrentEnvironment()
+  if (env === 'production') return 'prod'
+  if (env === 'staging') return 'staging'
+  return 'dev'
+}
+
+/**
+ * Validate that all required environment variables are set
+ */
+function validateEnvironmentVariables(): void {
+  const missing: string[] = []
+  
+  // Only require passwordless auth - other APIs are optional for now
+  if (!process.env.NEXT_PUBLIC_TSA_AUTH_API_URL && !process.env.NEXT_PUBLIC_PASSWORDLESS_AUTH_URL) {
+    missing.push('NEXT_PUBLIC_TSA_AUTH_API_URL or NEXT_PUBLIC_PASSWORDLESS_AUTH_URL')
+  }
+  
+  if (missing.length > 0) {
+    const stage = getStage()
+    throw new Error(
+      `❌ Missing required environment variables:\n` +
+      `   ${missing.join('\n   ')}\n\n` +
+      `🔧 To fix this:\n` +
+      `   1. Run: cd tsa-admin-frontend && npm run fetch-config\n` +
+      `   2. This will create/update .env.local with the correct URLs\n` +
+      `   3. Or deploy infrastructure: cd tsa-infrastructure && cdk deploy --all\n\n` +
+      `💡 Current stage: ${stage}\n` +
+      `💡 Only passwordless auth is required - other APIs are optional for now`
+    )
   }
 }
 
-// Environment-specific configurations
+/**
+ * Get API endpoints from environment variables (no fallbacks - must be set)
+ */
+function getApiEndpoints(): ApiEndpoints {
+  // Validate environment variables first
+  validateEnvironmentVariables()
+
+  const endpoints = {
+    adminApi: process.env.NEXT_PUBLIC_TSA_ADMIN_API_URL || 
+              process.env.NEXT_PUBLIC_ADMIN_API_URL || '',
+    
+    coachApi: process.env.NEXT_PUBLIC_TSA_COACH_API_URL || 
+              process.env.NEXT_PUBLIC_COACH_API_URL || '',
+    
+    passwordlessAuth: process.env.NEXT_PUBLIC_TSA_AUTH_API_URL || 
+                      process.env.NEXT_PUBLIC_PASSWORDLESS_AUTH_URL || '',
+  }
+
+  // Validate URLs (only if they're set)
+  Object.entries(endpoints).forEach(([key, url]) => {
+    if (url) {
+      try {
+        new URL(url)
+      } catch (error) {
+        throw new Error(`❌ Invalid URL for ${key}: "${url}"\n🔧 Run: npm run fetch-config`)
+      }
+    }
+  })
+
+  return endpoints
+}
+
+/**
+ * Base environment configurations
+ */
 const baseEnvironments: Record<Environment, Omit<EnvironmentConfig, 'apiEndpoints'>> = {
   development: {
     stage: 'dev',
     environment: 'development',
-    admin: {
-      email: 'danny.mota@superbuilders.school',
-    },
-    features: {
-      debugMode: true,
-      showPerformanceMetrics: true,
-      enableAnalytics: false,
-    },
-    app: {
-      name: 'TSA Admin Portal (DEV)',
-      version: '1.0.0-dev',
-    },
+    features: { debugMode: true },
+    app: { name: 'TSA Admin Portal (DEV)', version: '1.0.0-dev' },
   },
   staging: {
-    stage: 'staging', 
+    stage: 'staging',
     environment: 'staging',
-    admin: {
-      email: 'admin@sportsacademy.tech',
-    },
-    features: {
-      debugMode: false,
-      showPerformanceMetrics: true,
-      enableAnalytics: true,
-    },
-    app: {
-      name: 'TSA Admin Portal (STAGING)',
-      version: '1.0.0-staging',
-    },
+    features: { debugMode: false },
+    app: { name: 'TSA Admin Portal (STAGING)', version: '1.0.0-staging' },
   },
   production: {
     stage: 'prod',
     environment: 'production',
-    admin: {
-      email: 'admin@sportsacademy.tech',
-    },
-    features: {
-      debugMode: false,
-      showPerformanceMetrics: false,
-      enableAnalytics: true,
-    },
-    app: {
-      name: 'TSA Admin Portal',
-      version: '1.0.0',
-    },
+    features: { debugMode: false },
+    app: { name: 'TSA Admin Portal', version: '1.0.0' },
   },
-}
-
-/**
- * Get current environment from environment variables
- */
-function getCurrentEnvironment(): Environment {
-  const envVar = process.env.NEXT_PUBLIC_ENVIRONMENT as Environment;
-  if (envVar && baseEnvironments[envVar]) {
-    return envVar;
-  }
-  
-  const nodeEnv = process.env.NODE_ENV;
-  if (nodeEnv === 'production') return 'production';
-  
-  return 'development';
 }
 
 /**
  * Get complete environment configuration
  */
-function getEnvironmentConfig(): EnvironmentConfig {
-  const currentEnv = getCurrentEnvironment();
-  const baseConfig = baseEnvironments[currentEnv];
+export function getEnvironmentConfig(): EnvironmentConfig {
+  const currentEnv = getCurrentEnvironment()
+  const baseConfig = baseEnvironments[currentEnv]
+  const apiEndpoints = getApiEndpoints()
   
-  // Load API endpoints from generated config or fallback
-  let apiEndpoints = loadGeneratedConfig();
-  
-  // Runtime configuration using environment variables
-  const config: EnvironmentConfig = {
+  return {
+    ...baseConfig,
     environment: currentEnv,
-    apiEndpoints: {
-      adminApi: process.env.NEXT_PUBLIC_TSA_ADMIN_API_URL || process.env.NEXT_PUBLIC_ADMIN_API_URL || apiEndpoints.adminApi,
-      coachApi: process.env.NEXT_PUBLIC_TSA_COACH_API_URL || process.env.NEXT_PUBLIC_COACH_API_URL || apiEndpoints.coachApi,
-      passwordlessAuth: process.env.NEXT_PUBLIC_TSA_AUTH_API_URL || process.env.NEXT_PUBLIC_PASSWORDLESS_AUTH_URL || apiEndpoints.passwordlessAuth,
-    },
-    admin: {
-      email: process.env.NEXT_PUBLIC_ADMIN_EMAIL || baseConfig.admin.email,
-    },
+    apiEndpoints,
     features: {
+      ...baseConfig.features,
       debugMode: process.env.NEXT_PUBLIC_DEBUG_MODE === 'true' || baseConfig.features.debugMode,
     },
     app: {
+      ...baseConfig.app,
       name: process.env.NEXT_PUBLIC_APP_NAME || baseConfig.app.name,
-    }
-  };
-  
-  return config;
+    },
+  }
 }
 
-// Export current configuration
-export const config = getEnvironmentConfig();
+// Synchronous config object for immediate use in components
+export const config = getEnvironmentConfig()
 
 // Export utilities
-export const isProduction = () => config.environment === 'production';
-export const isDevelopment = () => config.environment === 'development';
-export const isStaging = () => config.environment === 'staging';
+export const getCurrentEnv = getCurrentEnvironment
+export const isProduction = () => getCurrentEnvironment() === 'production'
+export const isDevelopment = () => getCurrentEnvironment() === 'development' 
+export const isStaging = () => getCurrentEnvironment() === 'staging'
 
-// Debug information
-if (config.features.debugMode && typeof window !== 'undefined') {
+// Debug information (only in development)
+if (typeof window !== 'undefined' && config.features.debugMode) {
   console.log('🛠️ TSA Admin Portal Configuration:', {
     environment: config.environment,
     stage: config.stage,
     endpoints: config.apiEndpoints,
-    generatedConfigUsed: (() => {
-      try {
-        require('./generated-config.json');
-        return true;
-      } catch {
-        return false;
-      }
-    })(),
-  });
+    source: 'Environment Variables (No Fallbacks)'
+  })
 } 

@@ -19,9 +19,9 @@ The TSA Coach Admin Portal provides secure backend APIs for managing coach invit
 ### Base URLs
 ```javascript
 const API_ENDPOINTS = {
-  ADMIN_API: 'https://ekfw6ekr33.execute-api.us-east-1.amazonaws.com/prod',
-  COACH_API: 'https://kcdmb9q31m.execute-api.us-east-1.amazonaws.com/prod',
-  AUTH_API: 'https://in3vjwy2r8.execute-api.us-east-1.amazonaws.com/v1'
+  ADMIN_API: 'https://ekfw6ekr33.execute-api.us-east-2.amazonaws.com/prod',
+  COACH_API: 'https://kcdmb9q31m.execute-api.us-east-2.amazonaws.com/prod',
+  AUTH_API: 'https://in3vjwy2r8.execute-api.us-east-2.amazonaws.com/v1'
 };
 ```
 
@@ -50,7 +50,7 @@ const getHeaders = () => ({
 ### Authentication Test
 ```javascript
 // Test authentication
-fetch('https://ekfw6ekr33.execute-api.us-east-1.amazonaws.com/prod/admin/invitations', {
+fetch('https://ekfw6ekr33.execute-api.us-east-2.amazonaws.com/prod/admin/invitations', {
   headers: getHeaders()
 })
 .then(response => response.json())
@@ -254,7 +254,7 @@ const getAuditLogs = async (limit = 50) => {
 ```javascript
 class TSAAdminAPI {
   constructor() {
-    this.baseURL = 'https://ekfw6ekr33.execute-api.us-east-1.amazonaws.com/prod';
+    this.baseURL = 'https://ekfw6ekr33.execute-api.us-east-2.amazonaws.com/prod';
     this.adminEmail = 'danny.mota@superbuilders.school';
   }
 
@@ -560,11 +560,11 @@ async function handleApiCall() {
 ### Quick API Test
 ```bash
 # Test health endpoint (no auth)
-curl https://ekfw6ekr33.execute-api.us-east-1.amazonaws.com/prod/health
+curl https://ekfw6ekr33.execute-api.us-east-2.amazonaws.com/prod/health
 
 # Test authenticated endpoint
 curl -H "Authorization: Bearer ZGFubnkubW90YUBzdXBlcmJ1aWxkZXJzLnNjaG9vbA==" \
-  https://ekfw6ekr33.execute-api.us-east-1.amazonaws.com/prod/admin/invitations
+  https://ekfw6ekr33.execute-api.us-east-2.amazonaws.com/prod/admin/invitations
 ```
 
 ### Frontend Testing Checklist

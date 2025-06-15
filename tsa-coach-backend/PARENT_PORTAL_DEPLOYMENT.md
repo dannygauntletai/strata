@@ -569,12 +569,12 @@ const corsOrigins = {
 ### ✅ Successfully Deployed Infrastructure:
 
 **Coach Portal Service** (`tsa-coach-backend-dev`):
-- **API Gateway**: `https://deibk5wgx1.execute-api.us-east-1.amazonaws.com/prod/`
+- **API Gateway**: `https://deibk5wgx1.execute-api.us-east-2.amazonaws.com/prod/`
 - **Tables Created**: `profiles-v3-dev`, `parent-invitations-v3-dev`, `onboarding-sessions-v3-dev`
 - **Functionality**: Coach onboarding, parent invitation management, coach dashboard
 
 **Parent Portal Service** (`tsa-parent-backend-dev`):
-- **API Gateway**: `https://4ojhuzmaie.execute-api.us-east-1.amazonaws.com/prod/`
+- **API Gateway**: `https://4ojhuzmaie.execute-api.us-east-2.amazonaws.com/prod/`
 - **Tables Created**: `tsa-parent-enrollments-v3-dev`, `tsa-parent-documents-v3-dev`, `tsa-parent-scheduling-v3-dev`
 - **Functionality**: Parent enrollment, document management, unified dashboard, communication
 

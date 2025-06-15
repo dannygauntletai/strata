@@ -3,7 +3,7 @@
 ## Current Structure Analysis
 ```
 tsa/
-├── tsa-coach-frontend/          # Next.js React app
+├── tsa-platform-frontend/          # Next.js React app
 ├── tsa-coach-backend/           # Node.js/Lambda backend
 ├── tsa-admin-frontend/          # Admin React app
 ├── tsa-admin-backend/          # Admin backend services
@@ -42,7 +42,7 @@ cp -r ../tsa/scripts/* ./scripts/
 2. **Add Each Service as Submodule:**
 ```bash
 # Initialize git repos for each service first
-cd ../tsa/tsa-coach-frontend && git init && git add . && git commit -m "Initial commit"
+cd ../tsa/tsa-platform-frontend && git init && git add . && git commit -m "Initial commit"
 cd ../tsa/tsa-coach-backend && git init && git add . && git commit -m "Initial commit"
 cd ../tsa/tsa-admin-frontend && git init && git add . && git commit -m "Initial commit"
 cd ../tsa/tsa-admin-backend && git init && git add . && git commit -m "Initial commit"
@@ -50,7 +50,7 @@ cd ../tsa/tsa-infrastructure && git init && git add . && git commit -m "Initial 
 
 # Add as submodules
 cd /Users/gauntletai/Desktop/tsa-monorepo
-git submodule add ../tsa/tsa-coach-frontend services/coach-frontend
+git submodule add ../tsa/tsa-platform-frontend services/coach-frontend
 git submodule add ../tsa/tsa-coach-backend services/coach-backend
 git submodule add ../tsa/tsa-admin-frontend services/admin-frontend
 git submodule add ../tsa/tsa-admin-backend services/admin-backend
@@ -151,7 +151,7 @@ git init tsa-monorepo
 cd tsa-monorepo
 
 # Add each service as subtree
-git subtree add --prefix=services/coach-frontend ../tsa/tsa-coach-frontend main --squash
+git subtree add --prefix=services/coach-frontend ../tsa/tsa-platform-frontend main --squash
 git subtree add --prefix=services/coach-backend ../tsa/tsa-coach-backend main --squash
 git subtree add --prefix=services/admin-frontend ../tsa/tsa-admin-frontend main --squash
 git subtree add --prefix=services/admin-backend ../tsa/tsa-admin-backend main --squash
