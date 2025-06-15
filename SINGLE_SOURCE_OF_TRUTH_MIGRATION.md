@@ -140,11 +140,85 @@ table_configs = config.get_dynamodb_table_configs()
 4. ✅ **Updated Shared Utilities**: Layer now uses centralized naming
 5. ✅ **Environment Variables**: Backend functions get table names via env vars
 6. ✅ **Removed Duplicates**: Deleted redundant table configuration files
+7. ✅ **Implemented Centralized Methods**: Added missing configuration methods properly
+
+### **🛠️ New Centralized Methods Available:**
+
+#### **Table Name Management:**
+```python
+config = get_resource_config("dev")
+
+# Get individual table name
+table_name = config.get_table_name("users")  # Returns: "users-dev"
+
+# Get all table names at once
+all_tables = config.get_all_table_names()
+# Returns: {"users": "users-dev", "events": "events-dev", ...}
+```
+
+#### **Environment Variables for Lambda Functions:**
+```python
+# Service-specific environment variables
+env_vars = config.get_service_environment_variables("admin")
+# Returns all table env vars + service-specific vars
+
+# Usage in CDK:
+lambda_config = {
+    "environment": {
+        **config.get_service_environment_variables("coach"),
+        "DB_HOST": database_host,
+        # ... other custom vars
+    }
+}
+```
+
+#### **Lambda Function Names:**
+```python
+# Standardized Lambda function names
+lambda_names = config.get_lambda_names()
+function_name = lambda_names["coach_profile"]  # Returns: "tsa-coach-profile-dev"
+
+# Usage in CDK:
+lambda_.Function(
+    self, "ProfileHandler",
+    function_name=config.get_lambda_names()["coach_profile"],
+    # ... other config
+)
+```
+
+#### **API Gateway Names:**
+```python
+# Standardized API names
+api_names = config.get_api_names()
+api_name = api_names["admin_api"]  # Returns: "TSA Admin API - dev"
+
+# Usage in CDK:
+apigateway.RestApi(
+    self, "AdminAPI",
+    rest_api_name=config.get_api_names()["admin_api"],
+    # ... other config
+)
+```
+
+#### **CloudWatch Log Group Names:**
+```python
+# Standardized log group names
+log_names = config.get_log_group_names()
+log_name = log_names["coach_api"]  # Returns: "/aws/apigateway/tsa-coach-api-dev"
+
+# Usage in CDK:
+logs.LogGroup(
+    self, "CoachAPILogs",
+    log_group_name=config.get_log_group_names()["coach_api"],
+    # ... other config
+)
+```
 
 ### **New Process for Developers:**
-- **Infrastructure**: Use `self.table_config.get_table_name("table-key")`
-- **Backend Functions**: Use environment variables (already working)
+- **Infrastructure**: Use `self.table_config.get_*()` methods for all resource naming
+- **Backend Functions**: Use environment variables (already working correctly)
 - **New Tables**: Add to centralized config only
+- **New Services**: Add entries to centralized naming methods
 
 ### **Medium Priority (Future Enhancements):**
 4. **Environment Variable Optimization**:
