@@ -168,7 +168,7 @@ class ParentPortalService(Construct):
         # Parent enrollment function - handles invitation validation and enrollment process
         self.enrollment_function = lambda_.Function(
             self, "ParentEnrollmentHandler",
-            function_name=self.resource_config.get_lambda_name("parent_enrollment"),
+            function_name=self.resource_config.get_lambda_names()["parent_enrollment"],
             code=lambda_.Code.from_asset("../tsa-parent-backend/lambda_enrollment"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -177,7 +177,7 @@ class ParentPortalService(Construct):
         # Parent dashboard function - handles dashboard data and role-based routing
         self.dashboard_function = lambda_.Function(
             self, "ParentDashboardHandler", 
-            function_name=self.resource_config.get_lambda_name("parent_dashboard"),
+            function_name=self.resource_config.get_lambda_names()["parent_dashboard"],
             code=lambda_.Code.from_asset("../tsa-parent-backend/lambda_dashboard"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -186,7 +186,7 @@ class ParentPortalService(Construct):
         # Admissions validation function - handles invitation validation
         self.admissions_function = lambda_.Function(
             self, "AdmissionsValidateHandler",
-            function_name=self.resource_config.get_lambda_name("admissions_validate"),
+            function_name=self.resource_config.get_lambda_names()["admissions_validate"],
             code=lambda_.Code.from_asset("../tsa-parent-backend/lambda_admissions_validate"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -206,20 +206,13 @@ class ParentPortalService(Construct):
             self.scheduling_table.grant_read_write_data(function)
         
             # Grant access to shared tables using standardized ARNs
+            shared_table_arns = get_table_iam_arns(self.stage)
             function.add_to_role_policy(
                 iam.PolicyStatement(
                     effect=iam.Effect.ALLOW,
                     actions=["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", 
                             "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan"],
-                    resources=[
-                        # Shared tables (OneRoster/EdFi standard)
-                        *get_table_iam_arns(self.stage, "users"),
-                        *get_table_iam_arns(self.stage, "organizations"),
-                        *get_table_iam_arns(self.stage, "enrollments"),
-                        *get_table_iam_arns(self.stage, "events"),
-                        *get_table_iam_arns(self.stage, "invitations"),
-                        *get_table_iam_arns(self.stage, "documents"),
-                    ]
+                    resources=shared_table_arns
                 )
             )
                 

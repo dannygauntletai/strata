@@ -3,7 +3,7 @@ TSA Platform - Single Source of Truth for Table Names
 Centralized table naming and configuration for all services
 """
 
-from typing import Dict, List
+from typing import Dict, List, Any
 import os
 
 
@@ -68,6 +68,12 @@ class TableNameConfig:
             # ===== SYSTEM TABLES =====
             "sessions": self.get_table_name("sessions"),
             "magic-links": self.get_table_name("tsa-magic-links"),  # Keep existing naming for this
+            
+            # ===== COACH-SPECIFIC TABLES =====
+            "coach-onboarding-sessions": self.get_table_name("coach-onboarding-sessions"),
+            
+            # ===== PARENT-SPECIFIC TABLES =====
+            "scheduling": self.get_table_name("scheduling"),
         }
     
     def get_dynamodb_table_configs(self) -> Dict[str, Dict]:
@@ -220,6 +226,97 @@ class TableNameConfig:
                 ]
             }
         }
+    
+    def get_service_environment_variables(self, service: str) -> Dict[str, str]:
+        """Get environment variables for a specific service"""
+        base_vars = {
+            "STAGE": self.stage,
+            "LOG_LEVEL": "INFO",
+        }
+        
+        # Add table environment variables
+        table_vars = {
+            "USERS_TABLE": self.get_table_name("users"),
+            "PROFILES_TABLE": self.get_table_name("profiles"),
+            "ORGANIZATIONS_TABLE": self.get_table_name("organizations"),
+            "INVITATIONS_TABLE": self.get_table_name("invitations"),
+            "ENROLLMENTS_TABLE": self.get_table_name("enrollments"),
+            "EVENTS_TABLE": self.get_table_name("events"),
+            "DOCUMENTS_TABLE": self.get_table_name("documents"),
+            "AUDIT_LOGS_TABLE": self.get_table_name("audit-logs"),
+        }
+        
+        # Service-specific variables
+        service_vars = {}
+        if service == "admin":
+            service_vars.update({
+                "TSA_USERS_TABLE": self.get_table_name("users"),
+                "TSA_PROFILES_TABLE": self.get_table_name("profiles"),
+                "TSA_INVITATIONS_TABLE": self.get_table_name("invitations"),
+                "TSA_ENROLLMENTS_TABLE": self.get_table_name("enrollments"),
+                "TSA_EVENTS_TABLE": self.get_table_name("events"),
+                "TSA_DOCUMENTS_TABLE": self.get_table_name("documents"),
+                "TSA_AUDIT_LOGS_TABLE": self.get_table_name("audit-logs"),
+            })
+        elif service == "coach":
+            service_vars.update({
+                "ONBOARDING_SESSIONS_TABLE": self.get_table_name("coach-onboarding-sessions"),
+                "BACKGROUND_CHECKS_TABLE": self.get_table_name("background-checks"),
+                "LEGAL_REQUIREMENTS_TABLE": self.get_table_name("legal-requirements"),
+                "EVENTBRITE_CONFIG_TABLE": self.get_table_name("eventbrite-config"),
+                "EVENT_ATTENDEES_TABLE": self.get_table_name("event-attendees"),
+            })
+        elif service == "parent":
+            service_vars.update({
+                "PARENT_INVITATIONS_TABLE": self.get_table_name("parent-invitations"),
+                "SCHEDULING_TABLE": self.get_table_name("scheduling"),
+            })
+        
+        return {**base_vars, **table_vars, **service_vars}
+    
+    def get_lambda_names(self) -> Dict[str, str]:
+        """Get standardized Lambda function names"""
+        return {
+            # Admin service functions
+            "admin_main": f"tsa-admin-portal-{self.stage}",
+            "admin_invitations": f"tsa-admin-portal-{self.stage}-invitations",
+            "admin_audit_health": f"tsa-admin-portal-{self.stage}-audit-health",
+            "admin_coaches": f"tsa-admin-portal-{self.stage}-coaches",
+            
+            # Coach service functions
+            "coach_onboard": f"tsa-coach-onboard-{self.stage}",
+            "coach_profile": f"tsa-coach-profile-{self.stage}",
+            "coach_events": f"tsa-coach-events-{self.stage}",
+            "coach_background": f"tsa-coach-background-{self.stage}",
+            "coach_eventbrite_oauth": f"tsa-coach-eventbrite-oauth-{self.stage}",
+            
+            # Parent service functions
+            "parent_enrollment": f"tsa-parent-enrollment-{self.stage}",
+            "parent_dashboard": f"tsa-parent-dashboard-{self.stage}",
+            "admissions_validate": f"tsa-admissions-validate-{self.stage}",
+            
+            # Auth service functions
+            "auth_magic_link": f"tsa-magic-link-{self.stage}",
+            "auth_verify_token": f"tsa-verify-token-{self.stage}",
+        }
+    
+    def get_api_names(self) -> Dict[str, str]:
+        """Get standardized API Gateway names"""
+        return {
+            "admin_api": f"TSA Admin API - {self.stage}",
+            "coach_api": f"TSA Coach API - {self.stage}",
+            "parent_api": f"TSA Parent API - {self.stage}",
+            "auth_api": f"TSA Unified Passwordless Auth API - {self.stage}",
+        }
+    
+    def get_log_group_names(self) -> Dict[str, str]:
+        """Get standardized CloudWatch log group names"""
+        return {
+            "admin_api": f"/aws/apigateway/tsa-admin-api-{self.stage}",
+            "coach_api": f"/aws/apigateway/tsa-coach-api-{self.stage}",
+            "parent_api": f"/aws/apigateway/tsa-parent-api-{self.stage}",
+            "auth_api": f"/aws/apigateway/tsa-passwordless-{self.stage}",
+        }
 
 
 # Global instance for easy import
@@ -263,6 +360,22 @@ def get_table_env_vars(stage: str) -> Dict[str, str]:
         "ONEROSTER_VERSION": "1.2",
         "DATA_STANDARD": "EdFi-OneRoster",
     }
+
+
+def get_table_iam_arns(stage: str, region: str = "us-east-2", account: str = "*") -> List[str]:
+    """Get IAM ARNs for all tables for permission policies"""
+    config = get_resource_config(stage)
+    all_tables = config.get_all_table_names()
+    
+    arns = []
+    for table_name in all_tables.values():
+        # Add table ARN and GSI ARN patterns
+        arns.extend([
+            f"arn:aws:dynamodb:{region}:{account}:table/{table_name}",
+            f"arn:aws:dynamodb:{region}:{account}:table/{table_name}/index/*"
+        ])
+    
+    return arns
 
 
 def get_table_config(stage: str) -> TableNameConfig:

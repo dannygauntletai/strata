@@ -213,7 +213,7 @@ class PasswordlessAuthStack(Stack):
         # Magic Link Generator Function
         self.magic_link_function = lambda_.Function(
             self, "MagicLinkHandler",
-            function_name=f"tsa-magic-link-v1-{self.stage}",
+            function_name=self.table_config.get_lambda_names()["auth_magic_link"],
             code=lambda_.Code.from_asset(
                 "../tsa-auth-backend",
                 bundling=BundlingOptions(
@@ -231,7 +231,7 @@ class PasswordlessAuthStack(Stack):
         # Token Verification Function
         self.verify_token_function = lambda_.Function(
             self, "VerifyTokenHandler", 
-            function_name=f"tsa-verify-token-v1-{self.stage}",
+            function_name=self.table_config.get_lambda_names()["auth_verify_token"],
             code=lambda_.Code.from_asset(
                 "../tsa-auth-backend",
                 bundling=BundlingOptions(
@@ -344,7 +344,7 @@ class PasswordlessAuthStack(Stack):
         # Create API Gateway
         self.api = apigateway.RestApi(
             self, "PasswordlessAPI",
-            rest_api_name=f"TSA Unified Passwordless Auth API - {self.stage}",
+            rest_api_name=self.table_config.get_api_names()["auth_api"],
             description="Unified passwordless email authentication for all TSA user types (coach, parent, admin)",
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=[

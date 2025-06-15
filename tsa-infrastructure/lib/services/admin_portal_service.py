@@ -132,6 +132,7 @@ class AdminPortalService(Construct):
         
         # Common environment variables
         common_env = {
+            **self.table_config.get_service_environment_variables("admin"),
             "DB_HOST": self.shared_resources.get("database_host", ""),
             "DB_NAME": self.shared_resources.get("database_name", ""),
             "DB_SECRET_ARN": self.shared_resources.get("database_secret_arn", ""),
@@ -164,7 +165,7 @@ class AdminPortalService(Construct):
         # 1. Coach Invitation Management (with SendGrid bundling like auth backend)
         self.invitations_function = lambda_.Function(
             self, "InvitationsHandler",
-            function_name=f"tsa-admin-portal-{self.stage}-invitations",
+            function_name=self.table_config.get_lambda_names()["admin_invitations"],
             code=lambda_.Code.from_asset(
                 "../tsa-admin-backend",
                 bundling=BundlingOptions(
@@ -190,7 +191,7 @@ class AdminPortalService(Construct):
         # 2. Audit & Health Monitoring
         self.audit_health_function = lambda_.Function(
             self, "AuditHealthHandler",
-            function_name=f"tsa-admin-portal-{self.stage}-audit-health",
+            function_name=self.table_config.get_lambda_names()["admin_audit_health"],
             code=lambda_.Code.from_asset("../tsa-admin-backend/lambda_audit_health"),
             handler="handler.lambda_handler",
             environment=common_env,
@@ -200,7 +201,7 @@ class AdminPortalService(Construct):
         # 3. Coach Management
         self.coaches_function = lambda_.Function(
             self, "CoachesHandler",
-            function_name=f"tsa-admin-portal-{self.stage}-coaches",
+            function_name=self.table_config.get_lambda_names()["admin_coaches"],
             code=lambda_.Code.from_asset("../tsa-admin-backend/lambda_coaches"),
             handler="handler.lambda_handler",
             environment=common_env,
@@ -307,7 +308,7 @@ class AdminPortalService(Construct):
         # Create log group for API Gateway
         log_group = logs.LogGroup(
             self, "AdminPortalAPILogs",
-            log_group_name=f"/aws/apigateway/tsa-admin-api-{self.stage}",
+            log_group_name=self.table_config.get_log_group_names()["admin_api"],
         )
         
         # Get environment-specific CORS origins
@@ -320,7 +321,7 @@ class AdminPortalService(Construct):
         # Create API Gateway
         self.api = apigateway.RestApi(
             self, "AdminPortalAPI",
-            rest_api_name=f"TSA Admin API - {self.stage}",
+            rest_api_name=self.table_config.get_api_names()["admin_api"],
             description=f"Streamlined API for TSA Admin Portal - Coach Invitations and Audit Health ({self.stage})",
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=admin_origins,

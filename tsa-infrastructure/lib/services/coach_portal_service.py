@@ -179,6 +179,7 @@ class CoachPortalService(Construct):
             "runtime": lambda_.Runtime.PYTHON_3_9,
             "layers": [self.coach_layer],
             "environment": {
+                **self.resource_config.get_service_environment_variables("coach"),
                 
                 # Shared table names from data infrastructure layer (single source of truth)
                 "USERS_TABLE": self.shared_table_names["users"],
@@ -231,7 +232,7 @@ class CoachPortalService(Construct):
         # Coach onboarding function
         self.onboarding_function = lambda_.Function(
             self, "OnboardingHandler",
-            function_name=f"tsa-coach-onboard-{self.stage}",
+            function_name=self.resource_config.get_lambda_names()["coach_onboard"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_onboard"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -240,7 +241,7 @@ class CoachPortalService(Construct):
         # Coach profile function
         self.profile_function = lambda_.Function(
             self, "ProfileHandler", 
-            function_name=f"tsa-coach-profile-{self.stage}",
+            function_name=self.resource_config.get_lambda_names()["coach_profile"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_profile"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -249,7 +250,7 @@ class CoachPortalService(Construct):
         # Coach events function
         self.events_function = lambda_.Function(
             self, "EventsHandler",
-            function_name=f"tsa-coach-events-{self.stage}",
+            function_name=self.resource_config.get_lambda_names()["coach_events"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_events"),
             handler="events_handler.lambda_handler",
             **lambda_config
@@ -258,7 +259,7 @@ class CoachPortalService(Construct):
         # Background check function
         self.background_function = lambda_.Function(
             self, "BackgroundHandler",
-            function_name=f"tsa-coach-background-{self.stage}",
+            function_name=self.resource_config.get_lambda_names()["coach_background"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_background_check"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -267,7 +268,7 @@ class CoachPortalService(Construct):
         # Eventbrite OAuth function
         self.eventbrite_oauth_function = lambda_.Function(
             self, "EventbriteOAuthHandler",
-            function_name=f"tsa-coach-eventbrite-oauth-{self.stage}",
+            function_name=self.resource_config.get_lambda_names()["coach_eventbrite_oauth"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_eventbrite_oauth"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -394,14 +395,14 @@ class CoachPortalService(Construct):
         # Create CloudWatch log group for API Gateway
         self.api_log_group = logs.LogGroup(
             self, "CoachAPILogGroup",
-            log_group_name=f"/aws/apigateway/tsa-coach-api-{self.stage}",
+            log_group_name=self.resource_config.get_log_group_names()["coach_api"],
             retention=logs.RetentionDays.ONE_MONTH
         )
         
         # Create API Gateway
         self.api = apigateway.RestApi(
             self, "CoachPortalAPI",
-            rest_api_name=f"TSA Coach API - {self.stage}",
+            rest_api_name=self.resource_config.get_api_names()["coach_api"],
             description=f"TSA Coach Portal API - {self.stage}",
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=self.env_config.get("cors_origins", {}).get("unified", [
