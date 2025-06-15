@@ -7,7 +7,8 @@ import { config } from '@/config/environments'
 
 // Admin configuration
 const AUTHORIZED_ADMIN_EMAILS = [
-  'danny.mota@superbuilders.school'
+  'danny.mota@superbuilders.school',
+  'malekai.mischke@superbuilders.school'
 ];
 
 export const isAuthorizedAdmin = (email: string): boolean => {

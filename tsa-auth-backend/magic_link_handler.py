@@ -310,6 +310,7 @@ def validate_admin_access_direct(email: str) -> bool:
             admin_emails = [
                 'admin@sportsacademy.tech',
                 'danny.mota@superbuilders.school',
+                'malekai.mischke@superbuilders.school',
                 # Add other authorized admin emails
             ]
         

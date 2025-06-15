@@ -47,6 +47,7 @@ class RoleValidator:
             return [
                 'admin@sportsacademy.tech',
                 'danny.mota@superbuilders.school',
+                'malekai.mischke@superbuilders.school',
                 # Add other authorized admin emails
             ]
     
