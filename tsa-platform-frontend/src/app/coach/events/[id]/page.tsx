@@ -79,6 +79,12 @@ interface Event {
   created_by: string
   created_at: string
   updated_at: string
+  
+  // Eventbrite integration fields
+  eventbrite_event_id?: string
+  eventbrite_url?: string
+  eventbrite_status?: string
+  last_synced?: string
 }
 
 export default function EventView({ params }: { params: { id: string } }) {
@@ -93,6 +99,8 @@ export default function EventView({ params }: { params: { id: string } }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showRSVPs, setShowRSVPs] = useState(false)
+  const [publishingToEventbrite, setPublishingToEventbrite] = useState(false)
+  const [syncingAttendees, setSyncingAttendees] = useState(false)
   const router = useRouter()
 
   const fetchEvent = useCallback(async () => {
@@ -229,6 +237,64 @@ export default function EventView({ params }: { params: { id: string } }) {
       alert('Failed to delete event')
     } finally {
       setDeleteLoading(false)
+    }
+  }
+
+  const handlePublishToEventbrite = async () => {
+    if (!event) return
+    
+    try {
+      setPublishingToEventbrite(true)
+      const apiUrl = await getCoachApiUrl()
+      const response = await fetch(`${apiUrl}/events/${event.event_id}/publish`, {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        alert('Event published to Eventbrite successfully!')
+        
+        // Refresh event data to get Eventbrite details
+        fetchEvent()
+      } else {
+        const errorData = await response.json()
+        alert(`Failed to publish to Eventbrite: ${errorData.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Error publishing to Eventbrite:', error)
+      alert('Failed to publish to Eventbrite')
+    } finally {
+      setPublishingToEventbrite(false)
+    }
+  }
+
+  const handleSyncAttendees = async () => {
+    if (!event) return
+    
+    try {
+      setSyncingAttendees(true)
+      const apiUrl = await getCoachApiUrl()
+      const response = await fetch(`${apiUrl}/events/${event.event_id}/sync`, {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        alert(`Successfully synced ${result.result.synced_count} attendees from Eventbrite!`)
+        
+        // Refresh event data and RSVPs
+        fetchEvent()
+        // Trigger RSVP refresh
+        window.location.reload()
+      } else {
+        const errorData = await response.json()
+        alert(`Failed to sync attendees: ${errorData.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Error syncing attendees:', error)
+      alert('Failed to sync attendees')
+    } finally {
+      setSyncingAttendees(false)
     }
   }
 
@@ -388,11 +454,23 @@ export default function EventView({ params }: { params: { id: string } }) {
                 {event.subcategory && ` • ${event.subcategory}`}
               </div>
             )}
+            
+            {/* Eventbrite Sync Status */}
+            {event.eventbrite_event_id && (
+              <div className="text-sm">
+                <span className="font-medium text-green-600">✅ Synced with Eventbrite</span>
+                {event.last_synced && (
+                  <span className="text-gray-500 ml-2">
+                    • Last synced: {formatDateTime(event.last_synced)}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <Button 
             outline 
             onClick={() => router.push(`/coach/events/${event.event_id}/edit`)}
@@ -401,6 +479,56 @@ export default function EventView({ params }: { params: { id: string } }) {
             <PencilIcon className="w-4 h-4" />
             Edit
           </Button>
+          
+          {/* Eventbrite Actions */}
+          {!event.eventbrite_event_id ? (
+            <Button 
+              color="green"
+              onClick={handlePublishToEventbrite}
+              disabled={publishingToEventbrite}
+              className="flex items-center gap-2"
+            >
+              {publishingToEventbrite ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Publishing...
+                </>
+              ) : (
+                <>
+                  📅 Publish to Eventbrite
+                </>
+              )}
+            </Button>
+          ) : (
+            <>
+              <Button 
+                outline
+                href={event.eventbrite_url}
+                target="_blank"
+                className="flex items-center gap-2"
+              >
+                🎟️ View on Eventbrite
+              </Button>
+              <Button 
+                outline
+                onClick={handleSyncAttendees}
+                disabled={syncingAttendees}
+                className="flex items-center gap-2"
+              >
+                {syncingAttendees ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    🔄 Sync Attendees
+                  </>
+                )}
+              </Button>
+            </>
+          )}
+          
           <Button 
             color="red" 
             onClick={() => setShowDeleteDialog(true)}

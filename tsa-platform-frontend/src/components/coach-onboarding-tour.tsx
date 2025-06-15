@@ -71,7 +71,7 @@ export function CoachOnboardingTour({ run, onComplete, forceRestart = false }: C
       if (!coachApiUrl) return null
 
       const authHeaders = getAuthHeader()
-      const response = await fetch(`${coachApiUrl}/coach/profile?email=${encodeURIComponent(email)}`, {
+      const response = await fetch(`${coachApiUrl}/profile?email=${encodeURIComponent(email)}`, {
         method: 'GET',
         headers: {
           ...authHeaders,
@@ -97,7 +97,7 @@ export function CoachOnboardingTour({ run, onComplete, forceRestart = false }: C
       if (!coachApiUrl) return false
 
       const authHeaders = getAuthHeader()
-      const response = await fetch(`${coachApiUrl}/coach/profile/preferences`, {
+      const response = await fetch(`${coachApiUrl}/profile/preferences`, {
         method: 'PATCH',
         headers: {
           ...authHeaders,

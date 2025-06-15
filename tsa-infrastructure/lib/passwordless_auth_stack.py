@@ -19,6 +19,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 from typing import Dict, Any
+from .shared.table_names import get_resource_config
 
 
 class PasswordlessAuthStack(Stack):
@@ -32,6 +33,9 @@ class PasswordlessAuthStack(Stack):
         self.stage = stage
         self.domain_name = domain_name
         self.frontend_url = frontend_url or f"https://coach.{domain_name}"
+        
+        # Get centralized table configuration
+        self.table_config = get_resource_config(stage)
         
         # Create core authentication resources
         self._create_user_pool()
@@ -116,7 +120,7 @@ class PasswordlessAuthStack(Stack):
     def _create_magic_link_storage(self):
         """Create or import DynamoDB table for magic link tokens"""
         
-        table_name = f"tsa-magic-links-v1-{self.stage}"
+        table_name = self.table_config.get_table_name("tsa-magic-links")
         
         try:
             # Try to import existing table
@@ -192,8 +196,8 @@ class PasswordlessAuthStack(Stack):
                 "USER_POOL_ID": self.user_pool.user_pool_id,
                 "CLIENT_ID": self.user_pool_client.user_pool_client_id,
                 "MAGIC_LINKS_TABLE": self.magic_links_table.table_name,
-                "TSA_INVITATIONS_TABLE": f"invitations-v1-{self.stage}",  # Coach invitations table
-                "PARENT_INVITATIONS_TABLE": f"coach-parent-invitations-v1-{self.stage}",  # Parent invitations table
+                "TSA_INVITATIONS_TABLE": self.table_config.get_table_name("invitations"),  # Coach invitations table
+                "PARENT_INVITATIONS_TABLE": self.table_config.get_table_name("parent-invitations"),  # Parent invitations table
                 "FRONTEND_URL": self.frontend_url,
                 "ADMIN_FRONTEND_URL": f"https://admin.{self.domain_name}" if self.stage == 'prod' else "http://localhost:3001",
                 "LOG_LEVEL": "INFO",
@@ -266,10 +270,10 @@ class PasswordlessAuthStack(Stack):
             resources=[
                 self.magic_links_table.table_arn,
                 f"{self.magic_links_table.table_arn}/index/*",  # GSI permissions
-                f"arn:aws:dynamodb:{self.region}:{self.account}:table/invitations-v1-{self.stage}",  # Coach invitations table
-                f"arn:aws:dynamodb:{self.region}:{self.account}:table/invitations-v1-{self.stage}/index/*",  # Coach invitations GSI
-                f"arn:aws:dynamodb:{self.region}:{self.account}:table/coach-parent-invitations-v1-{self.stage}",  # Parent invitations table
-                f"arn:aws:dynamodb:{self.region}:{self.account}:table/coach-parent-invitations-v1-{self.stage}/index/*"  # Parent invitations GSI
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('invitations')}",  # Coach invitations table
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('invitations')}/index/*",  # Coach invitations GSI
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('parent-invitations')}",  # Parent invitations table
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('parent-invitations')}/index/*"  # Parent invitations GSI
             ]
         )
         

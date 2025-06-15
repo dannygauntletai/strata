@@ -34,18 +34,18 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             elif '/health' in path:
                 return get_health_status()
             else:
-                return create_api_response(404, {'error': 'Calendar endpoint not found'})
+                return create_response(404, {'error': 'Calendar endpoint not found'})
         elif http_method == 'POST':
             if '/sync' in path:
                 return sync_calendar_events(event)
             elif '/create' in path:
                 return create_calendar_event(event)
             else:
-                return create_api_response(404, {'error': 'Calendar endpoint not found'})
+                return create_response(404, {'error': 'Calendar endpoint not found'})
         elif http_method == 'DELETE' and 'event_id' in path_params:
             return delete_calendar_event(path_params['event_id'], event)
         else:
-            return create_api_response(404, {
+            return create_response(404, {
                 'error': 'Endpoint not found',
                 'available_endpoints': [
                     'GET /calendar/oauth/url', 'GET /calendar/oauth/callback',
@@ -57,7 +57,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
     except Exception as e:
         print(f"💥 Handler Error: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "lambda_handler"))
+        return create_response(500, format_error_response(e, "lambda_handler"))
 
 
 def get_oauth_url(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -67,7 +67,7 @@ def get_oauth_url(event: Dict[str, Any]) -> Dict[str, Any]:
         coach_id = query_params.get('coach_id')
         
         if not coach_id:
-            return create_api_response(400, {'error': 'coach_id parameter required'})
+            return create_response(400, {'error': 'coach_id parameter required'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -75,12 +75,12 @@ def get_oauth_url(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Generate OAuth URL (simplified - actual implementation would use Google OAuth library)
         oauth_url = generate_google_oauth_url(normalized_profile_id)
         
-        return create_api_response(200, {
+        return create_response(200, {
             'oauth_url': oauth_url,
             'coach_id': normalized_profile_id,
             'message': 'Visit this URL to authorize Google Calendar access'
@@ -88,7 +88,7 @@ def get_oauth_url(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error generating OAuth URL: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "get_oauth_url"))
+        return create_response(500, format_error_response(e, "get_oauth_url"))
 
 
 def generate_google_oauth_url(coach_id: str) -> str:
@@ -119,12 +119,12 @@ def handle_oauth_callback(event: Dict[str, Any]) -> Dict[str, Any]:
         error = query_params.get('error')
         
         if error:
-            return create_api_response(400, {
+            return create_response(400, {
                 'error': f'OAuth authorization failed: {error}'
             })
         
         if not code or not state:
-            return create_api_response(400, {
+            return create_response(400, {
                 'error': 'Missing authorization code or state parameter'
             })
         
@@ -143,14 +143,14 @@ def handle_oauth_callback(event: Dict[str, Any]) -> Dict[str, Any]:
             'refresh_token': tokens.get('refresh_token'),
             'token_expires_at': tokens.get('expires_at'),
             'status': 'active',
-            'created_at': get_current_time(),
-            'updated_at': get_current_time()
+            'created_at': get_current_timestamp(),
+            'updated_at': get_current_timestamp()
         }
         
         calendar_integrations_table.put_item(Item=integration_data)
         
         print(f"✅ Google Calendar connected for coach: {coach_id}")
-        return create_api_response(200, {
+        return create_response(200, {
             'message': 'Google Calendar successfully connected',
             'coach_id': coach_id,
             'status': 'active'
@@ -158,7 +158,7 @@ def handle_oauth_callback(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error handling OAuth callback: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "handle_oauth_callback"))
+        return create_response(500, format_error_response(e, "handle_oauth_callback"))
 
 
 def exchange_code_for_tokens(code: str) -> Dict[str, Any]:
@@ -168,7 +168,7 @@ def exchange_code_for_tokens(code: str) -> Dict[str, Any]:
     return {
         'access_token': f'mock_access_token_{code[:10]}',
         'refresh_token': f'mock_refresh_token_{code[:10]}',
-        'expires_at': get_current_time(),
+        'expires_at': get_current_timestamp(),
         'token_type': 'Bearer'
     }
 
@@ -180,7 +180,7 @@ def get_calendar_status(event: Dict[str, Any]) -> Dict[str, Any]:
         coach_id = query_params.get('coach_id')
         
         if not coach_id:
-            return create_api_response(400, {'error': 'coach_id parameter required'})
+            return create_response(400, {'error': 'coach_id parameter required'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -189,13 +189,13 @@ def get_calendar_status(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Check integration status
         response = calendar_integrations_table.get_item(Key={'coach_id': normalized_profile_id})
         
         if 'Item' not in response:
-            return create_api_response(200, {
+            return create_response(200, {
                 'status': 'not_connected',
                 'coach_id': normalized_profile_id,
                 'message': 'Google Calendar not connected'
@@ -203,7 +203,7 @@ def get_calendar_status(event: Dict[str, Any]) -> Dict[str, Any]:
         
         integration = response['Item']
         
-        return create_api_response(200, {
+        return create_response(200, {
             'status': integration.get('status', 'unknown'),
             'provider': integration.get('provider', 'google'),
             'connected_at': integration.get('created_at'),
@@ -213,7 +213,7 @@ def get_calendar_status(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error getting calendar status: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "get_calendar_status"))
+        return create_response(500, format_error_response(e, "get_calendar_status"))
 
 
 def list_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -223,7 +223,7 @@ def list_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
         coach_id = query_params.get('coach_id')
         
         if not coach_id:
-            return create_api_response(400, {'error': 'coach_id parameter required'})
+            return create_response(400, {'error': 'coach_id parameter required'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -231,13 +231,13 @@ def list_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Get access token
         access_token = get_valid_access_token(normalized_profile_id)
         
         if not access_token:
-            return create_api_response(401, {
+            return create_response(401, {
                 'error': 'Google Calendar not connected or token expired',
                 'action': 'reconnect_required'
             })
@@ -245,7 +245,7 @@ def list_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
         # Fetch events from Google Calendar (simplified)
         calendar_events = fetch_google_calendar_events(access_token, query_params)
         
-        return create_api_response(200, {
+        return create_response(200, {
             'events': calendar_events,
             'count': len(calendar_events),
             'coach_id': normalized_profile_id
@@ -253,7 +253,7 @@ def list_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error listing calendar events: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "list_calendar_events"))
+        return create_response(500, format_error_response(e, "list_calendar_events"))
 
 
 def sync_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -263,7 +263,7 @@ def sync_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
         coach_id = body.get('coach_id')
         
         if not coach_id:
-            return create_api_response(400, {'error': 'coach_id is required'})
+            return create_response(400, {'error': 'coach_id is required'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -271,13 +271,13 @@ def sync_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Get access token
         access_token = get_valid_access_token(normalized_profile_id)
         
         if not access_token:
-            return create_api_response(401, {
+            return create_response(401, {
                 'error': 'Google Calendar not connected or token expired',
                 'action': 'reconnect_required'
             })
@@ -310,10 +310,10 @@ def sync_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
         calendar_integrations_table.update_item(
             Key={'coach_id': normalized_profile_id},
             UpdateExpression='SET last_sync_at = :sync_time',
-            ExpressionAttributeValues={':sync_time': get_current_time()}
+            ExpressionAttributeValues={':sync_time': get_current_timestamp()}
         )
         
-        return create_api_response(200, {
+        return create_response(200, {
             'message': f'Synced {len(synced_events)} events to Google Calendar',
             'synced_events': synced_events,
             'total_events': len(tsa_events)
@@ -321,7 +321,7 @@ def sync_calendar_events(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error syncing calendar events: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "sync_calendar_events"))
+        return create_response(500, format_error_response(e, "sync_calendar_events"))
 
 
 def create_calendar_event(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -333,7 +333,7 @@ def create_calendar_event(event: Dict[str, Any]) -> Dict[str, Any]:
         required_fields = ['coach_id', 'title', 'start_date', 'end_date']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
-            return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
+            return create_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -341,13 +341,13 @@ def create_calendar_event(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(body['coach_id'], profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Get access token
         access_token = get_valid_access_token(normalized_profile_id)
         
         if not access_token:
-            return create_api_response(401, {
+            return create_response(401, {
                 'error': 'Google Calendar not connected or token expired',
                 'action': 'reconnect_required'
             })
@@ -355,7 +355,7 @@ def create_calendar_event(event: Dict[str, Any]) -> Dict[str, Any]:
         # Create event in Google Calendar
         google_event_id = create_google_calendar_event(body, access_token)
         
-        return create_api_response(201, {
+        return create_response(201, {
             'message': 'Event created in Google Calendar',
             'google_event_id': google_event_id,
             'title': body['title']
@@ -363,7 +363,7 @@ def create_calendar_event(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error creating calendar event: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "create_calendar_event"))
+        return create_response(500, format_error_response(e, "create_calendar_event"))
 
 
 def get_valid_access_token(coach_id: str) -> Optional[str]:
@@ -420,7 +420,7 @@ def delete_calendar_event(event_id: str, event: Dict[str, Any]) -> Dict[str, Any
         coach_id = body.get('coach_id')
         
         if not coach_id:
-            return create_api_response(400, {'error': 'coach_id is required'})
+            return create_response(400, {'error': 'coach_id is required'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -428,13 +428,13 @@ def delete_calendar_event(event_id: str, event: Dict[str, Any]) -> Dict[str, Any
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Get access token
         access_token = get_valid_access_token(normalized_profile_id)
         
         if not access_token:
-            return create_api_response(401, {
+            return create_response(401, {
                 'error': 'Google Calendar not connected or token expired',
                 'action': 'reconnect_required'
             })
@@ -442,14 +442,14 @@ def delete_calendar_event(event_id: str, event: Dict[str, Any]) -> Dict[str, Any
         # Delete from Google Calendar (simplified)
         delete_google_calendar_event(event_id, access_token)
         
-        return create_api_response(200, {
+        return create_response(200, {
             'message': 'Event deleted from Google Calendar',
             'event_id': event_id
         })
         
     except Exception as e:
         print(f"💥 Error deleting calendar event: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "delete_calendar_event"))
+        return create_response(500, format_error_response(e, "delete_calendar_event"))
 
 
 def delete_google_calendar_event(event_id: str, access_token: str) -> None:
@@ -464,16 +464,16 @@ def get_health_status() -> Dict[str, Any]:
         calendar_integrations_table = get_dynamodb_table(get_table_name('calendar_integrations'))
         calendar_integrations_table.load()
         
-        return create_api_response(200, {
+        return create_response(200, {
             'status': 'healthy',
             'service': 'coach-google-calendar',
-            'timestamp': get_current_time(),
+            'timestamp': get_current_timestamp(),
             'version': '2.0.0'
         })
         
     except Exception as e:
         print(f"💥 Health Error: {str(e)}")
-        return create_api_response(500, {
+        return create_response(500, {
             'status': 'unhealthy',
             'error': str(e)
         }) 

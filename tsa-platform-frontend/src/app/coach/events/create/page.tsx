@@ -7,9 +7,7 @@ import { Heading } from '@/components/heading'
 import { Input } from '@/components/input'
 import { Textarea } from '@/components/textarea'
 import { Select } from '@/components/select'
-import { Checkbox } from '@/components/checkbox'
 import { AddressAutocomplete } from '@/components/address-autocomplete'
-import { PhotoIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { getCurrentUser } from '@/lib/auth'
 import { getCoachApiUrl } from '@/lib/ssm-config'
 
@@ -23,56 +21,67 @@ interface AddressData {
   zip: string
 }
 
+interface TicketType {
+  name: string
+  description: string
+  cost: number
+  currency: string
+  quantity_total?: number
+  include_fee: boolean
+}
+
 interface EventFormData {
   title: string
   description: string
-  location: string
-  street: string
+  venue_name: string
+  address_line_1: string
+  address_line_2: string
   city: string
   state: string
-  zip: string
+  postal_code: string
+  country: string
   start_date: string
   end_date: string
   start_time: string
   end_time: string
+  timezone: string
   category: string
-  subcategory: string
-  max_participants: string
-  cost: string
+  capacity: string
   registration_deadline: string
-  is_public: boolean
-  tags: string[]
-  requirements: string[]
+  visibility: 'public' | 'private'
+  ticket_types: TicketType[]
 }
 
 function CreateEventContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
-  const [photos, setPhotos] = useState<File[]>([])
-  const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
-  const [currentTag, setCurrentTag] = useState('')
-  const [currentRequirement, setCurrentRequirement] = useState('')
   const [formData, setFormData] = useState<EventFormData>({
     title: '',
     description: '',
-    location: '',
-    street: '',
+    venue_name: '',
+    address_line_1: '',
+    address_line_2: '',
     city: '',
     state: '',
-    zip: '',
+    postal_code: '',
+    country: 'US',
     start_date: '',
     end_date: '',
     start_time: '',
     end_time: '',
-    category: '',
-    subcategory: '',
-    max_participants: '',
-    cost: '0',
+    timezone: 'America/Chicago',
+    category: 'training',
+    capacity: '',
     registration_deadline: '',
-    is_public: true,
-    tags: [],
-    requirements: []
+    visibility: 'public',
+    ticket_types: [{
+      name: 'General Admission',
+      description: '',
+      cost: 0,
+      currency: 'USD',
+      include_fee: true
+    }]
   })
 
   // Pre-fill date from URL parameters if provided
@@ -96,68 +105,11 @@ function CreateEventContent() {
   const handleAddressSelect = (address: AddressData) => {
     setFormData(prev => ({
       ...prev,
-      street: address.street,
+      address_line_1: address.street,
       city: address.city,
       state: address.state,
-      zip: address.zip
+      postal_code: address.zip
     }))
-  }
-
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    
-    // Validate file types and sizes
-    const validFiles = files.filter(file => {
-      if (!file.type.startsWith('image/')) {
-        alert(`${file.name} is not an image file`)
-        return false
-      }
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        alert(`${file.name} is too large. Maximum size is 5MB`)
-        return false
-      }
-      return true
-    })
-
-    if (validFiles.length > 0) {
-      setPhotos(prev => [...prev, ...validFiles])
-      
-      // Create previews
-      validFiles.forEach(file => {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          setPhotoPreviews(prev => [...prev, e.target?.result as string])
-        }
-        reader.readAsDataURL(file)
-      })
-    }
-  }
-
-  const removePhoto = (index: number) => {
-    setPhotos(prev => prev.filter((_, i) => i !== index))
-    setPhotoPreviews(prev => prev.filter((_, i) => i !== index))
-  }
-
-  const addTag = () => {
-    if (currentTag.trim() && !formData.tags.includes(currentTag.trim())) {
-      handleInputChange('tags', [...formData.tags, currentTag.trim()])
-      setCurrentTag('')
-    }
-  }
-
-  const removeTag = (tag: string) => {
-    handleInputChange('tags', formData.tags.filter(t => t !== tag))
-  }
-
-  const addRequirement = () => {
-    if (currentRequirement.trim() && !formData.requirements.includes(currentRequirement.trim())) {
-      handleInputChange('requirements', [...formData.requirements, currentRequirement.trim()])
-      setCurrentRequirement('')
-    }
-  }
-
-  const removeRequirement = (requirement: string) => {
-    handleInputChange('requirements', formData.requirements.filter(r => r !== requirement))
   }
 
   const formatDateTime = (date: string, time: string) => {
@@ -177,7 +129,7 @@ function CreateEventContent() {
         return
       }
 
-      // Format dates
+      // Format dates with timezone
       const start_date = formatDateTime(formData.start_date, formData.start_time)
       const end_date = formatDateTime(
         formData.end_date || formData.start_date, 
@@ -189,9 +141,6 @@ function CreateEventContent() {
         return
       }
 
-      // Create FormData for multipart upload
-      const submitData = new FormData()
-
       // Get authenticated user
       const user = getCurrentUser()
       if (!user?.email) {
@@ -199,42 +148,41 @@ function CreateEventContent() {
         return
       }
 
-      // Add event data as JSON
+      // Prepare event data for new API format
       const eventData = {
+        coach_id: user.email,
         title: formData.title,
         description: formData.description,
-        location: formData.location,
-        street: formData.street,
-        city: formData.city,
-        state: formData.state,
-        zip: formData.zip,
+        summary: formData.description.substring(0, 200),
         start_date,
         end_date,
+        timezone: formData.timezone,
+        venue_name: formData.venue_name,
+        address_line_1: formData.address_line_1,
+        address_line_2: formData.address_line_2,
+        city: formData.city,
+        state: formData.state,
+        postal_code: formData.postal_code,
+        country: formData.country,
         category: formData.category,
-        subcategory: formData.subcategory,
-        max_participants: formData.max_participants ? parseInt(formData.max_participants) : null,
-        cost: parseFloat(formData.cost),
+        capacity: formData.capacity ? parseInt(formData.capacity) : null,
         registration_deadline: formData.registration_deadline 
           ? formatDateTime(formData.registration_deadline, '23:59') 
           : start_date,
-        is_public: formData.is_public,
-        tags: formData.tags,
-        requirements: formData.requirements,
-        created_by: user.email
+        visibility: formData.visibility,
+        status: 'draft', // Start as draft, coaches can publish later
+        ticket_types: formData.ticket_types,
+        currency: 'USD'
       }
 
-      submitData.append('event_data', JSON.stringify(eventData))
-
-      // Add photos
-      photos.forEach((photo, index) => {
-        submitData.append(`photo_${index}`, photo)
-      })
-
-      // Make API call to backend - Call Lambda directly
+      // Make API call to backend
       const apiUrl = await getCoachApiUrl()
       const response = await fetch(`${apiUrl}/events`, {
         method: 'POST',
-        body: submitData
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(eventData)
       })
 
       if (!response.ok) {
@@ -244,6 +192,15 @@ function CreateEventContent() {
 
       const result = await response.json()
       console.log('Event created successfully:', result)
+
+      // Show success message if Eventbrite sync info is available
+      if (result.eventbrite_sync) {
+        if (result.eventbrite_sync.success) {
+          alert('Event created successfully and synced with Eventbrite!')
+        } else {
+          alert('Event created successfully, but Eventbrite sync failed. You can retry sync later.')
+        }
+      }
 
       // Redirect to events page
       router.push('/coach/events')
@@ -264,9 +221,9 @@ function CreateEventContent() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Basic Information */}
+        {/* Event Information */}
         <div className="bg-white rounded-lg shadow-sm ring-1 ring-gray-900/5 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Event Information</h3>
           <div className="grid grid-cols-1 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -293,36 +250,23 @@ function CreateEventContent() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <Select
-                  value={formData.category}
-                  onChange={(e) => handleInputChange('category', e.target.value)}
-                >
-                  <option value="">Select category</option>
-                  <option value="training">Training</option>
-                  <option value="competition">Competition</option>
-                  <option value="camp">Camp</option>
-                  <option value="clinic">Clinic</option>
-                  <option value="tournament">Tournament</option>
-                  <option value="social">Social Event</option>
-                  <option value="fundraiser">Fundraiser</option>
-                </Select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Subcategory
-                </label>
-                <Input
-                  value={formData.subcategory}
-                  onChange={(e) => handleInputChange('subcategory', e.target.value)}
-                  placeholder="e.g., Basketball, Soccer"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Category
+              </label>
+              <Select
+                value={formData.category}
+                onChange={(e) => handleInputChange('category', e.target.value)}
+              >
+                <option value="">Select category</option>
+                <option value="training">Training</option>
+                <option value="competition">Competition</option>
+                <option value="camp">Camp</option>
+                <option value="clinic">Clinic</option>
+                <option value="tournament">Tournament</option>
+                <option value="social">Social Event</option>
+                <option value="fundraiser">Fundraiser</option>
+              </Select>
             </div>
           </div>
         </div>
@@ -399,22 +343,33 @@ function CreateEventContent() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Location Name
+                Venue Name
               </label>
               <Input
-                value={formData.location}
-                onChange={(e) => handleInputChange('location', e.target.value)}
+                value={formData.venue_name}
+                onChange={(e) => handleInputChange('venue_name', e.target.value)}
                 placeholder="e.g., Sports Complex, Gym Name"
               />
             </div>
 
             <div>
               <AddressAutocomplete
-                value={formData.street}
-                onChange={(value) => handleInputChange('street', value)}
+                value={formData.address_line_1}
+                onChange={(value) => handleInputChange('address_line_1', value)}
                 onAddressSelect={handleAddressSelect}
                 placeholder="Start typing address..."
-                label="Address"
+                label="Address Line 1"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Address Line 2 (Optional)
+              </label>
+              <Input
+                value={formData.address_line_2}
+                onChange={(e) => handleInputChange('address_line_2', e.target.value)}
+                placeholder="Apartment, suite, etc."
               />
             </div>
 
@@ -446,8 +401,8 @@ function CreateEventContent() {
                   ZIP Code
                 </label>
                 <Input
-                  value={formData.zip}
-                  onChange={(e) => handleInputChange('zip', e.target.value)}
+                  value={formData.postal_code}
+                  onChange={(e) => handleInputChange('postal_code', e.target.value)}
                   placeholder="ZIP"
                 />
               </div>
@@ -455,18 +410,18 @@ function CreateEventContent() {
           </div>
         </div>
 
-        {/* Event Details */}
+        {/* Event Settings */}
         <div className="bg-white rounded-lg shadow-sm ring-1 ring-gray-900/5 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Event Details</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Event Settings</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Max Participants
+                Capacity
               </label>
               <Input
                 type="number"
-                value={formData.max_participants}
-                onChange={(e) => handleInputChange('max_participants', e.target.value)}
+                value={formData.capacity}
+                onChange={(e) => handleInputChange('capacity', e.target.value)}
                 placeholder="Leave empty for unlimited"
                 min="1"
               />
@@ -474,161 +429,113 @@ function CreateEventContent() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Cost ($)
+                Visibility
+              </label>
+              <Select
+                value={formData.visibility}
+                onChange={(e) => handleInputChange('visibility', e.target.value as 'public' | 'private')}
+              >
+                <option value="public">Public (visible on Eventbrite)</option>
+                <option value="private">Private (invite only)</option>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Ticket Types */}
+        <div className="bg-white rounded-lg shadow-sm ring-1 ring-gray-900/5 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Ticket Information</h3>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ticket Name
+                </label>
+                <Input
+                  value={formData.ticket_types[0]?.name || ''}
+                  onChange={(e) => {
+                    const newTicketTypes = [...formData.ticket_types]
+                    newTicketTypes[0] = { ...newTicketTypes[0], name: e.target.value }
+                    handleInputChange('ticket_types', newTicketTypes)
+                  }}
+                  placeholder="General Admission"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cost ($)
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.ticket_types[0]?.cost || 0}
+                  onChange={(e) => {
+                    const newTicketTypes = [...formData.ticket_types]
+                    newTicketTypes[0] = { ...newTicketTypes[0], cost: parseFloat(e.target.value) || 0 }
+                    handleInputChange('ticket_types', newTicketTypes)
+                  }}
+                  placeholder="0.00"
+                  min="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Quantity (Optional)
+                </label>
+                <Input
+                  type="number"
+                  value={formData.ticket_types[0]?.quantity_total || ''}
+                  onChange={(e) => {
+                    const newTicketTypes = [...formData.ticket_types]
+                    newTicketTypes[0] = { 
+                      ...newTicketTypes[0], 
+                      quantity_total: e.target.value ? parseInt(e.target.value) : undefined 
+                    }
+                    handleInputChange('ticket_types', newTicketTypes)
+                  }}
+                  placeholder="Unlimited"
+                  min="1"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ticket Description (Optional)
               </label>
               <Input
-                type="number"
-                step="0.01"
-                value={formData.cost}
-                onChange={(e) => handleInputChange('cost', e.target.value)}
-                placeholder="0.00"
-                min="0"
+                value={formData.ticket_types[0]?.description || ''}
+                onChange={(e) => {
+                  const newTicketTypes = [...formData.ticket_types]
+                  newTicketTypes[0] = { ...newTicketTypes[0], description: e.target.value }
+                  handleInputChange('ticket_types', newTicketTypes)
+                }}
+                placeholder="Additional information about this ticket type"
               />
             </div>
 
-            <div className="md:col-span-2">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={formData.is_public}
-                  onChange={(checked) => handleInputChange('is_public', checked)}
-                />
-                <label className="text-sm font-medium text-gray-700">
-                  Make this event public (visible to parents)
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tags & Requirements */}
-        <div className="bg-white rounded-lg shadow-sm ring-1 ring-gray-900/5 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Tags & Requirements</h3>
-          
-          <div className="space-y-6">
-            {/* Tags */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Tags
-              </label>
-              <div className="flex gap-2 mb-2">
-                <Input
-                  value={currentTag}
-                  onChange={(e) => setCurrentTag(e.target.value)}
-                  placeholder="Add a tag"
-                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                />
-                <Button type="button" onClick={addTag} outline>
-                  <PlusIcon className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {formData.tags.map((tag, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-[#004aad] text-white text-sm rounded-md"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => removeTag(tag)}
-                      className="hover:bg-[#003888] rounded-sm p-0.5"
-                    >
-                      <XMarkIcon className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Requirements */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Requirements
-              </label>
-              <div className="flex gap-2 mb-2">
-                <Input
-                  value={currentRequirement}
-                  onChange={(e) => setCurrentRequirement(e.target.value)}
-                  placeholder="Add a requirement"
-                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addRequirement())}
-                />
-                <Button type="button" onClick={addRequirement} outline>
-                  <PlusIcon className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {formData.requirements.map((requirement, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-2 bg-gray-50 rounded-md"
-                  >
-                    <span className="text-sm">{requirement}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeRequirement(requirement)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <XMarkIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Photos */}
-        <div className="bg-white rounded-lg shadow-sm ring-1 ring-gray-900/5 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Event Photos</h3>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Upload Photos (Max 5MB each)
-              </label>
-              <div className="flex items-center justify-center w-full">
-                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <PhotoIcon className="w-10 h-10 mb-3 text-gray-400" />
-                    <p className="mb-2 text-sm text-gray-500">
-                      <span className="font-semibold">Click to upload</span> or drag and drop
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-blue-800">
+                    Eventbrite Integration
+                  </h3>
+                  <div className="mt-2 text-sm text-blue-700">
+                    <p>
+                      This event will be automatically created on Eventbrite when you save it. 
+                      Parents can register directly through Eventbrite, and attendee information 
+                      will be synced back to TSA automatically.
                     </p>
-                    <p className="text-xs text-gray-500">PNG, JPG, GIF up to 5MB</p>
                   </div>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
-                  />
-                </label>
+                </div>
               </div>
             </div>
-
-            {/* Photo Previews */}
-            {photoPreviews.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {photoPreviews.map((preview, index) => (
-                  <div key={index} className="relative">
-                    <img
-                      src={preview}
-                      alt={`Preview ${index + 1}`}
-                      className="w-full h-32 object-cover rounded-lg"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removePhoto(index)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                    >
-                      <XMarkIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
+
+
 
         {/* Form Actions */}
         <div className="flex flex-col sm:flex-row gap-4 pt-6">
@@ -662,7 +569,7 @@ export default function CreateEvent() {
           <div className="h-4 bg-gray-200 rounded w-1/2 animate-pulse"></div>
         </div>
         <div className="space-y-8">
-          {[...Array(3)].map((_, i) => (
+          {[...Array(5)].map((_, i) => (
             <div key={i} className="bg-white rounded-lg shadow-sm ring-1 ring-gray-900/5 p-6">
               <div className="h-6 bg-gray-200 rounded w-1/4 mb-4 animate-pulse"></div>
               <div className="space-y-4">

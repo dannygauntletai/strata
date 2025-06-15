@@ -12,64 +12,34 @@ from typing import Optional, Any
 def get_table_name(table_key: str) -> str:
     """
     Get standardized table name using centralized naming convention
+    MIGRATED TO USE SINGLE SOURCE OF TRUTH: tsa-infrastructure/lib/shared/table_names.py
     
     Args:
         table_key: Key identifier for the table (e.g., 'profiles', 'events', 'enrollments')
     
     Returns:
-        Full table name with environment prefix
+        Full table name with environment suffix
     """
-    # Environment-based table naming
+    # Use centralized naming convention: {name}-{stage} (no version suffix)
     stage = os.environ.get('STAGE', 'dev')
     
-    # Standardized table name mapping
-    table_mapping = {
-        # Core user tables (OneRoster/EdFi standard)
-        'users': f'users-v1-{stage}',
-        'profiles': f'profiles-v1-{stage}',
-        'organizations': f'organizations-v1-{stage}',
-        
-        # Enrollment and academic tables
-        'enrollments': f'tsa-parent-enrollments-v1-{stage}',
-        'students': f'students-v1-{stage}',
-        'academic_sessions': f'academic-sessions-v1-{stage}',
-        
-        # Event and activity tables
-        'events': f'events-v1-{stage}',
-        'event_registrations': f'event-registrations-v1-{stage}',
-        'event_invitations': f'event-invitations-v1-{stage}',
-        
-        # Communication tables
-        'parent_invitations': f'parent-invitations-v1-{stage}',
-        'notifications': f'notifications-v1-{stage}',
-        'messages': f'messages-v1-{stage}',
-        
-        # Progress and assessment tables
-        'bootcamp_progress': f'bootcamp-progress-v1-{stage}',
-        'quiz_attempts': f'quiz-attempts-v1-{stage}',
-        'assessments': f'assessments-v1-{stage}',
-        'timeline_events': f'timeline-events-v1-{stage}',
-        
-        # Administrative tables
-        'background_checks': f'background-checks-v1-{stage}',
-        'legal_requirements': f'legal-requirements-v1-{stage}',
-        'documents': f'tsa-coach-documents-v1-{stage}',
-        
-        # Integration tables
-        'calendar_integrations': f'calendar-integrations-v1-{stage}',
-        'external_integrations': f'external-integrations-v1-{stage}',
-        
-        # System tables
-        'audit_logs': f'audit-logs-v1-{stage}',
-        'system_config': f'system-config-v1-{stage}'
+    # Normalize table key
+    normalized_key = table_key.lower().replace('_', '-')
+    
+    # Special cases for legacy compatibility
+    special_cases = {
+        'tsa-magic-links': f'tsa-magic-links-{stage}',  # Keep existing naming
+        'coach-parent-invitations': f'parent-invitations-{stage}',  # Simplified name
+        'tsa-parent-enrollments': f'enrollments-{stage}',  # Simplified name
+        'tsa-coach-documents': f'documents-{stage}',  # Simplified name
     }
     
-    # Get table name or construct default
-    table_name = table_mapping.get(table_key)
-    if not table_name:
-        # Fallback: construct name from key
-        table_name = f'{table_key.lower().replace("_", "-")}-v1-{stage}'
-        print(f"⚠️ Using fallback table name for '{table_key}': {table_name}")
+    # Check special cases first
+    if normalized_key in special_cases:
+        table_name = special_cases[normalized_key]
+    else:
+        # Standard naming: {table-key}-{stage}
+        table_name = f'{normalized_key}-{stage}'
     
     print(f"🗄️ Table lookup: {table_key} -> {table_name}")
     return table_name

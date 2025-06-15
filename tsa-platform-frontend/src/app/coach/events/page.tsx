@@ -30,6 +30,17 @@ import { getCoachApiUrl } from '@/lib/ssm-config'
 // IMPORTANT: Always use getCoachApiUrl() from SSM config - DO NOT hardcode API endpoints!
 // This ensures centralized configuration management and prevents broken URLs during infrastructure changes
 
+// Helper function to safely parse dates
+const safeDateParse = (dateString: string | undefined) => {
+  if (!dateString) return null
+  try {
+    const date = new Date(dateString)
+    return isNaN(date.getTime()) ? null : date
+  } catch {
+    return null
+  }
+}
+
 function generateCalendarDays(year: number, month: number, events: any[]) {
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
@@ -38,24 +49,27 @@ function generateCalendarDays(year: number, month: number, events: any[]) {
   const today = new Date()
   
   const days = []
-  
+
   // Helper function to get events for a specific date
   const getEventsForDate = (dateString: string) => {
     return events.filter(event => {
-      const eventDate = new Date(event.start_date).toISOString().split('T')[0]
-      return eventDate === dateString
+      const eventDate = safeDateParse(event.start_date)
+      if (!eventDate) return false
+      return eventDate.toISOString().split('T')[0] === dateString
     }).map(event => {
-      const eventDate = new Date(event.start_date).toISOString().split('T')[0]
+      const eventDate = safeDateParse(event.start_date)
+      const eventDateString = eventDate ? eventDate.toISOString().split('T')[0] : dateString
+      
       return {
         id: event.event_id,
         name: event.title,
-        time: new Date(event.start_date).toLocaleTimeString('en-US', { 
+        time: eventDate ? eventDate.toLocaleTimeString('en-US', { 
           hour: 'numeric', 
           minute: '2-digit',
           hour12: true 
-        }),
-        datetime: event.start_date,
-        date: eventDate,
+        }) : 'TBD',
+        datetime: event.start_date || '',
+        date: eventDateString,
         href: `/coach/events/${event.event_id}`
       }
     })
@@ -123,6 +137,10 @@ function EventsContent() {
   // Google Calendar integration state
   const [creatingGoogleEvents, setCreatingGoogleEvents] = useState<Record<string, boolean>>({})
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false)
+  
+  // Eventbrite integration state
+  const [eventbriteConnected, setEventbriteConnected] = useState(false)
+  const [eventbriteLoading, setEventbriteLoading] = useState(true)
 
   // Check Google Calendar connection status
   useEffect(() => {
@@ -143,6 +161,29 @@ function EventsContent() {
       }
     }
     checkGoogleCalendarStatus()
+  }, [])
+
+  // Check Eventbrite connection status
+  useEffect(() => {
+    const checkEventbriteStatus = async () => {
+      try {
+        const user = getCurrentUser()
+        if (!user?.email) return
+
+        const apiUrl = await getCoachApiUrl()
+        const response = await fetch(`${apiUrl}/eventbrite/oauth/status`)
+        
+        if (response.ok) {
+          const data = await response.json()
+          setEventbriteConnected(data.connected)
+        }
+      } catch (error) {
+        console.error('Error checking Eventbrite status:', error)
+      } finally {
+        setEventbriteLoading(false)
+      }
+    }
+    checkEventbriteStatus()
   }, [])
 
   // Create Google Calendar event
@@ -184,6 +225,24 @@ function EventsContent() {
       alert('Failed to create Google Calendar event')
     } finally {
       setCreatingGoogleEvents(prev => ({ ...prev, [event.event_id]: false }))
+    }
+  }
+
+  // Connect to Eventbrite
+  const handleConnectEventbrite = async () => {
+    try {
+      const apiUrl = await getCoachApiUrl()
+      const response = await fetch(`${apiUrl}/eventbrite/oauth/authorize`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        window.location.href = data.authorization_url
+      } else {
+        alert('Failed to initiate Eventbrite connection')
+      }
+    } catch (error) {
+      console.error('Error connecting to Eventbrite:', error)
+      alert('Failed to connect to Eventbrite')
     }
   }
 
@@ -329,7 +388,8 @@ function EventsContent() {
   }
 
   const formatEventDate = (dateString: string) => {
-    const date = new Date(dateString)
+    const date = safeDateParse(dateString)
+    if (!date) return 'Invalid Date'
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -339,7 +399,8 @@ function EventsContent() {
   }
 
   const formatEventTime = (dateString: string) => {
-    const date = new Date(dateString)
+    const date = safeDateParse(dateString)
+    if (!date) return 'TBD'
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
@@ -348,7 +409,8 @@ function EventsContent() {
   }
 
   const formatDateShort = (dateString: string) => {
-    const date = new Date(dateString)
+    const date = safeDateParse(dateString)
+    if (!date) return 'TBD'
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
@@ -392,19 +454,87 @@ function EventsContent() {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <Button
-            href="/coach/events/calendar"
-            className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
-          >
-            <CalendarDaysIcon className="h-4 w-4 mr-2" />
-            Calendar View
-          </Button>
           <Button color="blue" onClick={handleAddEvent}>
             <PlusIcon className="h-4 w-4 mr-2" />
             New Event
           </Button>
         </div>
       </div>
+
+      {/* Connection Status */}
+      {!eventbriteLoading && (
+        <div className="mb-6 space-y-4">
+          {/* Eventbrite Connection */}
+          {eventbriteConnected ? (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <div className="flex-shrink-0">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                </div>
+                <p className="text-sm text-green-800">
+                  <span className="font-medium">✅ Eventbrite Connected!</span> Your events will automatically sync to Eventbrite for registration management.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex-shrink-0">
+                    <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                  </div>
+                  <p className="text-sm text-orange-800">
+                    <span className="font-medium">🎟️ Connect Eventbrite</span> to automatically publish events and manage registrations through Eventbrite's platform.
+                  </p>
+                </div>
+                <Button 
+                  size="sm"
+                  outline
+                  onClick={handleConnectEventbrite}
+                  className="border-orange-300 text-orange-700 hover:bg-orange-100"
+                >
+                  Connect Now
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          {/* Google Calendar Connection */}
+          {googleCalendarConnected ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <div className="flex-shrink-0">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                </div>
+                <p className="text-sm text-blue-800">
+                  <span className="font-medium">📅 Google Calendar Connected!</span> You can add your TSA events to your Google Calendar.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex-shrink-0">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                  </div>
+                  <p className="text-sm text-blue-800">
+                    <span className="font-medium">📅 Connect Google Calendar</span> to sync your TSA events with your personal calendar.
+                  </p>
+                </div>
+                <Button 
+                  size="sm"
+                  outline
+                  href="/coach/profile#calendar-integration"
+                  className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                >
+                  Connect Calendar
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Events Grid */}
       {events.length === 0 ? (
@@ -464,6 +594,11 @@ function EventsContent() {
                           {creatingGoogleEvents[event.event_id] ? 'Adding to Calendar...' : 'Add to Google Calendar'}
                         </DropdownItem>
                       )}
+                      {event.eventbrite_url && (
+                        <DropdownItem href={event.eventbrite_url} target="_blank">
+                          View on Eventbrite
+                        </DropdownItem>
+                      )}
                       <DropdownItem onClick={() => handleDeleteEvent(event)}>Delete</DropdownItem>
                     </DropdownMenu>
                   </Dropdown>
@@ -478,19 +613,26 @@ function EventsContent() {
                       {event.title}
                     </Link>
                   </h3>
-                  {event.event_type && (
-                    <Badge 
-                      color={
-                        event.event_type === 'training' ? 'blue' :
-                        event.event_type === 'tournament' ? 'red' :
-                        event.event_type === 'meeting' ? 'green' :
-                        event.event_type === 'camp' ? 'purple' :
-                        'zinc'
-                      }
-                    >
-                      {event.event_type}
-                    </Badge>
-                  )}
+                  <div className="flex gap-2">
+                    {event.event_type && (
+                      <Badge 
+                        color={
+                          event.event_type === 'training' ? 'blue' :
+                          event.event_type === 'tournament' ? 'red' :
+                          event.event_type === 'meeting' ? 'green' :
+                          event.event_type === 'camp' ? 'purple' :
+                          'zinc'
+                        }
+                      >
+                        {event.event_type}
+                      </Badge>
+                    )}
+                    {event.eventbrite_event_id && (
+                      <Badge color="emerald" title="Synced with Eventbrite">
+                        Eventbrite
+                      </Badge>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2 text-sm text-gray-600 mb-4">

@@ -32,6 +32,9 @@ interface Event {
   current_participants?: number
   cost?: number
   created_at: string
+  eventbrite_event_id?: string
+  eventbrite_url?: string
+  eventbrite_status?: string
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -318,9 +321,16 @@ export default function EventsCalendarPage() {
                       key={event.event_id}
                       className={`text-xs px-2 py-1 rounded border cursor-pointer hover:shadow-sm transition-shadow ${getEventTypeColor(event.event_type)}`}
                       onClick={(e) => handleEventClick(e, event.event_id)}
-                      title={`${event.title} - ${formatEventTime(event.start_date)}`}
+                      title={`${event.title} - ${formatEventTime(event.start_date)}${event.eventbrite_event_id ? ' (Eventbrite)' : ''}`}
                     >
-                      <div className="font-medium truncate">{event.title}</div>
+                      <div className="flex items-center gap-1">
+                        <div className="font-medium truncate flex-1">{event.title}</div>
+                        {event.eventbrite_event_id && (
+                          <span className="text-green-600 font-bold" title="Synced with Eventbrite">
+                            🎟️
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1 text-xs opacity-75">
                         <ClockIcon className="h-3 w-3" />
                         <span>{formatEventTime(event.start_date)}</span>

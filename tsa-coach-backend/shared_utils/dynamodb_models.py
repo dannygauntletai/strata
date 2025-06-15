@@ -16,6 +16,7 @@ ARCHITECTURE:
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Union
 from enum import Enum
+from datetime import datetime, timezone
 
 
 # =================================================================
@@ -586,9 +587,208 @@ class SystemMetric(BaseModel):
 
 
 # =================================================================
-# DYNAMODB TABLE CONFIGURATION
+# EVENT MANAGEMENT DATABASE MODELS
 # =================================================================
 
+class EventStatus(str, Enum):
+    """Event status"""
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
+
+
+class EventVisibility(str, Enum):
+    """Event visibility"""
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
+class EventCategory(str, Enum):
+    """Event categories"""
+    TRAINING = "training"
+    TOURNAMENT = "tournament" 
+    CAMP = "camp"
+    MEETING = "meeting"
+    CLINIC = "clinic"
+    SHOWCASE = "showcase"
+    TRYOUT = "tryout"
+    SOCIAL = "social"
+
+
+class TicketType(BaseModel):
+    """Event ticket type"""
+    name: str = Field(..., max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    cost: float = Field(default=0.0, ge=0.0)  # Cost in dollars
+    currency: str = Field(default="USD")
+    quantity_total: Optional[int] = None  # None = unlimited
+    quantity_sold: int = Field(default=0)
+    sales_start: Optional[str] = None  # ISO datetime
+    sales_end: Optional[str] = None    # ISO datetime
+    hidden: bool = Field(default=False)
+    include_fee: bool = Field(default=True)
+    split_fee_with_organizer: bool = Field(default=False)
+
+
+class EventbriteIntegration(BaseModel):
+    """Eventbrite integration details"""
+    eventbrite_event_id: Optional[str] = None
+    eventbrite_url: Optional[str] = None
+    eventbrite_status: Optional[str] = None
+    last_synced: Optional[str] = None
+    sync_errors: List[str] = Field(default_factory=list)
+    auto_sync_enabled: bool = Field(default=True)
+
+
+class Event(BaseModel):
+    """Events table (DynamoDB) - TSA events that integrate with Eventbrite"""
+    event_id: str = Field(..., description="Partition key")
+    coach_id: str = Field(..., description="GSI key - event creator")
+    
+    # Basic Event Information
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(default="", max_length=5000)
+    summary: Optional[str] = Field(None, max_length=500)  # Short description
+    
+    # Date and Time
+    start_date: str = Field(..., description="ISO datetime with timezone")
+    end_date: str = Field(..., description="ISO datetime with timezone")
+    timezone: str = Field(default="America/Chicago")
+    
+    # Location Details  
+    venue_name: Optional[str] = Field(None, max_length=255)
+    address_line_1: Optional[str] = Field(None, max_length=255)
+    address_line_2: Optional[str] = Field(None, max_length=255)
+    city: Optional[str] = Field(None, max_length=100)
+    state: Optional[str] = Field(None, max_length=50)
+    postal_code: Optional[str] = Field(None, max_length=20)
+    country: str = Field(default="US")
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    
+    # Event Configuration
+    category: EventCategory = EventCategory.TRAINING
+    subcategory: Optional[str] = Field(None, max_length=100)
+    tags: List[str] = Field(default_factory=list)
+    status: EventStatus = EventStatus.DRAFT
+    visibility: EventVisibility = EventVisibility.PUBLIC
+    
+    # Capacity and Registration
+    capacity: Optional[int] = None  # None = unlimited
+    current_registrations: int = Field(default=0)
+    waitlist_enabled: bool = Field(default=False)
+    registration_deadline: Optional[str] = None  # ISO datetime
+    
+    # Ticketing
+    ticket_types: List[TicketType] = Field(default_factory=list)
+    currency: str = Field(default="USD")
+    refund_policy: Optional[str] = Field(None, max_length=1000)
+    
+    # Requirements and Information
+    age_restrictions: Optional[str] = Field(None, max_length=200)
+    requirements: List[str] = Field(default_factory=list)
+    what_to_bring: List[str] = Field(default_factory=list)
+    
+    # Media
+    logo_url: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    
+    # Eventbrite Integration
+    eventbrite: EventbriteIntegration = Field(default_factory=EventbriteIntegration)
+    
+    # Metadata
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    published_at: Optional[str] = None
+
+
+class EventbriteOAuthStatus(str, Enum):
+    """Eventbrite OAuth status"""
+    NOT_CONNECTED = "not_connected"
+    CONNECTED = "connected"
+    EXPIRED = "expired"
+    ERROR = "error"
+
+
+class EventbriteConfig(BaseModel):
+    """Coach's Eventbrite configuration"""
+    coach_id: str = Field(..., description="Partition key")
+    
+    # OAuth Integration
+    oauth_status: EventbriteOAuthStatus = EventbriteOAuthStatus.NOT_CONNECTED
+    access_token: Optional[str] = None  # Encrypted
+    refresh_token: Optional[str] = None  # Encrypted
+    token_expires_at: Optional[str] = None  # ISO datetime
+    
+    # Eventbrite Account Info
+    eventbrite_user_id: Optional[str] = None
+    eventbrite_organization_id: Optional[str] = None
+    organization_name: Optional[str] = None
+    
+    # Default Settings
+    default_currency: str = Field(default="USD")
+    default_timezone: str = Field(default="America/Chicago") 
+    auto_publish_events: bool = Field(default=False)
+    sync_attendees: bool = Field(default=True)
+    
+    # Sync Status
+    last_sync: Optional[str] = None
+    sync_errors: List[str] = Field(default_factory=list)
+    
+    # Metadata
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class AttendeeStatus(str, Enum):
+    """Attendee status from Eventbrite"""
+    ATTENDING = "attending"
+    NOT_ATTENDING = "not_attending"
+    CHECKED_IN = "checked_in"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
+
+
+class EventAttendee(BaseModel):
+    """Event attendees synced from Eventbrite"""
+    attendee_id: str = Field(..., description="Partition key - Eventbrite attendee ID")
+    event_id: str = Field(..., description="GSI key")
+    
+    # Attendee Information
+    first_name: str = Field(..., max_length=100)
+    last_name: str = Field(..., max_length=100)
+    email: str = Field(..., max_length=255)
+    
+    # Registration Details
+    ticket_class_name: str = Field(..., max_length=255)
+    order_id: str
+    cost: float = Field(default=0.0)
+    currency: str = Field(default="USD")
+    
+    # Status
+    status: AttendeeStatus = AttendeeStatus.ATTENDING
+    checked_in: bool = Field(default=False)
+    check_in_time: Optional[str] = None
+    
+    # Registration Questions (from Eventbrite)
+    registration_answers: Dict[str, Any] = Field(default_factory=dict)
+    
+    # Sync Information
+    eventbrite_created: str  # When registered on Eventbrite
+    last_synced: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    
+    # Metadata
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# =================================================================
+# DYNAMODB TABLE CONFIGURATION - MIGRATING TO CENTRALIZED CONFIG
+# TODO: Remove this file and use tsa-infrastructure/lib/shared/table_names.py
+# =================================================================
+
+# DEPRECATED: Use centralized table configuration instead
+# Import from: from tsa_infrastructure.shared.table_names import get_resource_config
 DYNAMODB_TABLE_CONFIGS = {
     "coach-profiles": {
         "KeySchema": [
@@ -800,6 +1000,59 @@ DYNAMODB_TABLE_CONFIGS = {
         "AttributeDefinitions": [
             {"AttributeName": "metric_date", "AttributeType": "S"},
             {"AttributeName": "timestamp", "AttributeType": "S"}
+        ]
+    },
+    
+    "events": {
+        "KeySchema": [
+            {"AttributeName": "event_id", "KeyType": "HASH"}
+        ],
+        "AttributeDefinitions": [
+            {"AttributeName": "event_id", "AttributeType": "S"},
+            {"AttributeName": "coach_id", "AttributeType": "S"},
+            {"AttributeName": "start_date", "AttributeType": "S"},
+            {"AttributeName": "status", "AttributeType": "S"}
+        ],
+        "GlobalSecondaryIndexes": [
+            {
+                "IndexName": "coach-events-index",
+                "KeySchema": [
+                    {"AttributeName": "coach_id", "KeyType": "HASH"},
+                    {"AttributeName": "start_date", "KeyType": "RANGE"}
+                ]
+            },
+            {
+                "IndexName": "status-date-index", 
+                "KeySchema": [
+                    {"AttributeName": "status", "KeyType": "HASH"},
+                    {"AttributeName": "start_date", "KeyType": "RANGE"}
+                ]
+            }
+        ]
+    },
+    
+    "eventbrite-config": {
+        "KeySchema": [
+            {"AttributeName": "coach_id", "KeyType": "HASH"}
+        ],
+        "AttributeDefinitions": [
+            {"AttributeName": "coach_id", "AttributeType": "S"}
+        ]
+    },
+    
+    "event-attendees": {
+        "KeySchema": [
+            {"AttributeName": "attendee_id", "KeyType": "HASH"}
+        ],
+        "AttributeDefinitions": [
+            {"AttributeName": "attendee_id", "AttributeType": "S"},
+            {"AttributeName": "event_id", "AttributeType": "S"}
+        ],
+        "GlobalSecondaryIndexes": [
+            {
+                "IndexName": "event-attendees-index",
+                "KeySchema": [{"AttributeName": "event_id", "KeyType": "HASH"}]
+            }
         ]
     }
 } 

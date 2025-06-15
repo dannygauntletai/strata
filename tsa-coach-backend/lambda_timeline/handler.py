@@ -38,7 +38,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif '/health' in path and http_method == 'GET':
             return get_health_status()
         else:
-            return create_api_response(404, {
+            return create_response(404, {
                 'error': 'Endpoint not found',
                 'available_endpoints': [
                     'GET /timeline', 'GET /timeline/status', 'GET /timeline/{id}',
@@ -48,7 +48,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
     except Exception as e:
         print(f"💥 Handler Error: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "lambda_handler"))
+        return create_response(500, format_error_response(e, "lambda_handler"))
 
 
 def get_timeline_status(query_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -57,7 +57,7 @@ def get_timeline_status(query_params: Dict[str, Any]) -> Dict[str, Any]:
         coach_id = query_params.get('coach_id')
         
         if not coach_id:
-            return create_api_response(400, {'error': 'coach_id parameter required'})
+            return create_response(400, {'error': 'coach_id parameter required'})
         
         # Use centralized ID mapping - convert email to profile_id if needed
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -65,7 +65,7 @@ def get_timeline_status(query_params: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Initialize status tracking
         timeline_status = {}
@@ -99,7 +99,7 @@ def get_timeline_status(query_params: Dict[str, Any]) -> Dict[str, Any]:
             'current_step': get_current_step(timeline_status)
         }
         
-        return create_api_response(200, {
+        return create_response(200, {
             'timeline_status': timeline_status,
             'progress_summary': progress_summary,
             'coach_id': normalized_profile_id
@@ -107,7 +107,7 @@ def get_timeline_status(query_params: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error getting timeline status: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "get_timeline_status"))
+        return create_response(500, format_error_response(e, "get_timeline_status"))
 
 
 def check_onboarding_status(profile_id: str, profiles_table) -> Dict[str, Any]:
@@ -336,7 +336,7 @@ def list_timeline_events(query_params: Dict[str, Any]) -> Dict[str, Any]:
         coach_id = query_params.get('coach_id')
         
         if not coach_id:
-            return create_api_response(400, {'error': 'coach_id parameter required'})
+            return create_response(400, {'error': 'coach_id parameter required'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -345,7 +345,7 @@ def list_timeline_events(query_params: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Query timeline events for this coach
         response = timeline_table.scan(
@@ -362,14 +362,14 @@ def list_timeline_events(query_params: Dict[str, Any]) -> Dict[str, Any]:
         # Sort by created_at
         events.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         
-        return create_api_response(200, {
+        return create_response(200, {
             'timeline_events': events,
             'count': len(events)
         })
         
     except Exception as e:
         print(f"💥 Error listing timeline events: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "list_timeline_events"))
+        return create_response(500, format_error_response(e, "list_timeline_events"))
 
 
 def create_timeline_event(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -381,7 +381,7 @@ def create_timeline_event(event: Dict[str, Any]) -> Dict[str, Any]:
         required_fields = ['coach_id', 'event_type', 'title']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
-            return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
+            return create_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
         # Normalize coach_id
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -390,7 +390,7 @@ def create_timeline_event(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(body['coach_id'], profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Create timeline event using centralized model
         event_data = {
@@ -402,7 +402,7 @@ def create_timeline_event(event: Dict[str, Any]) -> Dict[str, Any]:
             'status': body.get('status', 'pending'),
             'progress_percentage': body.get('progress_percentage', 0),
             'metadata': body.get('metadata', {}),
-            'created_at': get_current_time(),
+            'created_at': get_current_timestamp(),
             'completed_at': body.get('completed_at')
         }
         
@@ -413,14 +413,14 @@ def create_timeline_event(event: Dict[str, Any]) -> Dict[str, Any]:
         timeline_table.put_item(Item=timeline_event.to_dict())
         
         print(f"✅ Timeline event created: {timeline_event.event_id}")
-        return create_api_response(201, {
+        return create_response(201, {
             'message': 'Timeline event created successfully',
             'timeline_event': timeline_event.to_dict()
         })
         
     except Exception as e:
         print(f"💥 Error creating timeline event: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "create_timeline_event"))
+        return create_response(500, format_error_response(e, "create_timeline_event"))
 
 
 def update_timeline_event(event_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -433,7 +433,7 @@ def update_timeline_event(event_id: str, event: Dict[str, Any]) -> Dict[str, Any
         # Check if event exists
         response = timeline_table.get_item(Key={'event_id': event_id})
         if 'Item' not in response:
-            return create_api_response(404, {'error': 'Timeline event not found'})
+            return create_response(404, {'error': 'Timeline event not found'})
         
         # Build update expression
         updatable_fields = [
@@ -450,7 +450,7 @@ def update_timeline_event(event_id: str, event: Dict[str, Any]) -> Dict[str, Any
                 expression_values[f':{field}'] = body[field]
         
         if not update_expressions:
-            return create_api_response(400, {'error': 'No valid fields to update'})
+            return create_response(400, {'error': 'No valid fields to update'})
         
         # Update timeline event
         timeline_table.update_item(
@@ -463,14 +463,14 @@ def update_timeline_event(event_id: str, event: Dict[str, Any]) -> Dict[str, Any
         updated_response = timeline_table.get_item(Key={'event_id': event_id})
         updated_event = TimelineEvent(updated_response['Item'])
         
-        return create_api_response(200, {
+        return create_response(200, {
             'message': 'Timeline event updated successfully',
             'timeline_event': updated_event.to_dict()
         })
         
     except Exception as e:
         print(f"💥 Error updating timeline event: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "update_timeline_event"))
+        return create_response(500, format_error_response(e, "update_timeline_event"))
 
 
 def get_timeline_event(event_id: str) -> Dict[str, Any]:
@@ -480,18 +480,18 @@ def get_timeline_event(event_id: str) -> Dict[str, Any]:
         
         response = timeline_table.get_item(Key={'event_id': event_id})
         if 'Item' not in response:
-            return create_api_response(404, {'error': 'Timeline event not found'})
+            return create_response(404, {'error': 'Timeline event not found'})
         
         # Use TimelineEvent model for consistency
         timeline_event = TimelineEvent(response['Item'])
         
-        return create_api_response(200, {
+        return create_response(200, {
             'timeline_event': timeline_event.to_dict()
         })
         
     except Exception as e:
         print(f"💥 Error getting timeline event: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "get_timeline_event"))
+        return create_response(500, format_error_response(e, "get_timeline_event"))
 
 
 def get_health_status() -> Dict[str, Any]:
@@ -500,16 +500,16 @@ def get_health_status() -> Dict[str, Any]:
         timeline_table = get_dynamodb_table(get_table_name('timeline_events'))
         timeline_table.load()
         
-        return create_api_response(200, {
+        return create_response(200, {
             'status': 'healthy',
             'service': 'coach-timeline',
-            'timestamp': get_current_time(),
+            'timestamp': get_current_timestamp(),
             'version': '2.0.0'
         })
         
     except Exception as e:
         print(f"💥 Health Error: {str(e)}")
-        return create_api_response(500, {
+        return create_response(500, {
             'status': 'unhealthy',
             'error': str(e)
         })

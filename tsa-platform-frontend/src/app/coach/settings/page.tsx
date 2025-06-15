@@ -74,7 +74,7 @@ function SettingsContent() {
         return
       }
 
-      const response = await fetch(`${apiBaseUrl}/coach/profile?email=${encodeURIComponent(email)}`)
+      const response = await fetch(`${apiBaseUrl}/profile?email=${encodeURIComponent(email)}`)
       
       if (response.ok) {
         const data = await response.json()
@@ -142,7 +142,7 @@ function SettingsContent() {
         return
       }
 
-      const response = await fetch(`${apiBaseUrl}/coach/profile/photo`, {
+      const response = await fetch(`${apiBaseUrl}/profile/photo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

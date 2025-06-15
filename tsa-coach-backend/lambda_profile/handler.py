@@ -7,18 +7,15 @@ import os
 import boto3
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
-import sys
 
-# Add shared utilities to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared_utils'))
-
+# Import from local directory (copied shared utilities)
 from shared_utils import (
-    create_api_response, 
-    get_dynamodb_table, 
+    create_response,
+    get_dynamodb_table,
     get_table_name,
     parse_event_body,
     standardize_error_response,
-    get_current_time
+    get_current_timestamp
 )
 from dynamodb_models import CoachProfile
 from user_identifier import UserIdentifier
@@ -41,13 +38,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif path.endswith('/profile/preferences') and method == 'PATCH':
             return update_coach_preferences(event)
         elif path.endswith('/health') and method == 'GET':
-            return create_api_response(200, {'status': 'healthy', 'service': 'coach-profile'})
+            return create_response(200, {'status': 'healthy', 'service': 'coach-profile'})
         else:
-            return create_api_response(404, {'error': 'Endpoint not found'})
+            return create_response(404, {'error': 'Endpoint not found'})
             
     except Exception as e:
-        print(f"💥 Error in profile handler: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "lambda_handler"))
+        print(f"Lambda handler error: {str(e)}")
+        return create_response(500, standardize_error_response(e, "lambda_handler"))
 
 
 def get_coach_profile(query_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -57,7 +54,7 @@ def get_coach_profile(query_params: Dict[str, Any]) -> Dict[str, Any]:
         email = query_params.get('email')
         
         if not coach_id and not email:
-            return create_api_response(400, {'error': 'coach_id or email parameter required'})
+            return create_response(400, {'error': 'coach_id or email parameter required'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -68,12 +65,12 @@ def get_coach_profile(query_params: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 normalized_profile_id = UserIdentifier.normalize_coach_id(email, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Get coach profile
         response = profiles_table.get_item(Key={'profile_id': normalized_profile_id})
         if 'Item' not in response:
-            return create_api_response(404, {'error': 'Coach profile not found'})
+            return create_response(404, {'error': 'Coach profile not found'})
         
         profile = response['Item']
         
@@ -93,11 +90,11 @@ def get_coach_profile(query_params: Dict[str, Any]) -> Dict[str, Any]:
             'updated_at': profile.get('updated_at')
         }
         
-        return create_api_response(200, {'profile': profile_data})
+        return create_response(200, {'profile': profile_data})
         
     except Exception as e:
         print(f"💥 Error getting coach profile: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "get_coach_profile"))
+        return create_response(500, standardize_error_response(e, "get_coach_profile"))
 
 
 def update_coach_profile(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -107,7 +104,7 @@ def update_coach_profile(event: Dict[str, Any]) -> Dict[str, Any]:
         
         coach_id = body.get('coach_id') or body.get('email')
         if not coach_id:
-            return create_api_response(400, {'error': 'coach_id or email required'})
+            return create_response(400, {'error': 'coach_id or email required'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -115,16 +112,16 @@ def update_coach_profile(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Get existing profile
         response = profiles_table.get_item(Key={'profile_id': normalized_profile_id})
         if 'Item' not in response:
-            return create_api_response(404, {'error': 'Coach profile not found'})
+            return create_response(404, {'error': 'Coach profile not found'})
         
         # Build update expression for allowed fields
         update_expression = "SET updated_at = :timestamp"
-        expression_values = {':timestamp': get_current_time()}
+        expression_values = {':timestamp': get_current_timestamp()}
         expression_names = {}
         
         # Allow updating these profile fields
@@ -154,7 +151,7 @@ def update_coach_profile(event: Dict[str, Any]) -> Dict[str, Any]:
         
         updated_profile = updated_response['Attributes']
         
-        return create_api_response(200, {
+        return create_response(200, {
             'message': 'Profile updated successfully',
             'profile': {
                 'profile_id': updated_profile.get('profile_id'),
@@ -167,7 +164,7 @@ def update_coach_profile(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error updating coach profile: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "update_coach_profile"))
+        return create_response(500, standardize_error_response(e, "update_coach_profile"))
 
 
 def update_coach_preferences(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -177,7 +174,7 @@ def update_coach_preferences(event: Dict[str, Any]) -> Dict[str, Any]:
         
         coach_id = body.get('coach_id') or body.get('email')
         if not coach_id:
-            return create_api_response(400, {'error': 'coach_id or email required'})
+            return create_response(400, {'error': 'coach_id or email required'})
         
         # Use centralized ID mapping
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -185,18 +182,18 @@ def update_coach_preferences(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': str(e)})
+            return create_response(404, {'error': str(e)})
         
         # Get existing profile
         response = profiles_table.get_item(Key={'profile_id': normalized_profile_id})
         if 'Item' not in response:
-            return create_api_response(404, {'error': 'Coach profile not found'})
+            return create_response(404, {'error': 'Coach profile not found'})
         
         existing_profile = response['Item']
         
         # Build update expression
         update_expression = "SET updated_at = :timestamp"
-        expression_values = {':timestamp': get_current_time()}
+        expression_values = {':timestamp': get_current_timestamp()}
         
         # Handle preferences update
         if 'preferences' in body:
@@ -212,7 +209,7 @@ def update_coach_preferences(event: Dict[str, Any]) -> Dict[str, Any]:
             
             if body['dashboard_tour_completed']:
                 update_expression += ", dashboard_tour_completed_at = :tour_completed_at"
-                expression_values[':tour_completed_at'] = body.get('dashboard_tour_completed_at', get_current_time())
+                expression_values[':tour_completed_at'] = body.get('dashboard_tour_completed_at', get_current_timestamp())
         
         # Update the profile
         updated_response = profiles_table.update_item(
@@ -224,7 +221,7 @@ def update_coach_preferences(event: Dict[str, Any]) -> Dict[str, Any]:
         
         updated_profile = updated_response['Attributes']
         
-        return create_api_response(200, {
+        return create_response(200, {
             'message': 'Preferences updated successfully',
             'profile': {
                 'profile_id': updated_profile.get('profile_id'),
@@ -238,4 +235,4 @@ def update_coach_preferences(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error updating coach preferences: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "update_coach_preferences")) 
+        return create_response(500, standardize_error_response(e, "update_coach_preferences")) 
