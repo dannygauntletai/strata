@@ -398,7 +398,7 @@ def send_invitation_email(invitation: Dict[str, Any]) -> bool:
         start_date = datetime.fromisoformat(event_data['start_date'].replace('Z', '+00:00'))
         formatted_date = start_date.strftime("%B %d, %Y at %I:%M %p")
         
-        invitation_link = f"{os.environ.get('FRONTEND_URL', 'https://app.texassportsacademy.com')}/invitations/{invitation['invitation_id']}"
+        invitation_link = f"{os.environ.get('FRONTEND_URL', 'https://localhost:3000')}/invitations/{invitation['invitation_id']}"
         
         body_html = f"""
         <html>

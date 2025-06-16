@@ -67,7 +67,7 @@ class ComputeStack(Stack):
         # Common environment variables
         common_env = {
             "FROM_EMAIL": "noreply@texassportsacademy.com",
-            "FRONTEND_URL": "https://app.texassportsacademy.com",
+            "FRONTEND_URL": "https://localhost:3000",
             "COACHES_TABLE": "coaches",
             "INVITATIONS_TABLE": "coach-invitations",
             "WIZARD_DATA_TABLE": "onboarding-wizard",
