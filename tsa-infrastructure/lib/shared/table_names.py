@@ -289,6 +289,7 @@ class TableNameConfig:
             "coach_events": f"tsa-coach-events-{self.stage}",
             "coach_background": f"tsa-coach-background-{self.stage}",
             "coach_eventbrite_oauth": f"tsa-coach-eventbrite-oauth-{self.stage}",
+            "coach_invitations": f"tsa-coach-invitations-{self.stage}",
             
             # Parent service functions
             "parent_enrollment": f"tsa-parent-enrollment-{self.stage}",

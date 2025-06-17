@@ -73,7 +73,7 @@ graph TB
 # 🚀 DynamoDB Tables (NoSQL)
 
 ## Table Naming Convention
-All DynamoDB tables follow the pattern: `{logical-name}-v1-{stage}`
+All DynamoDB tables follow the pattern: `{logical-name}-{stage}`
 
 ### 📊 **Coach Portal Tables**
 

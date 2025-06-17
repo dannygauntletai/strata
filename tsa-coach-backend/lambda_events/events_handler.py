@@ -96,7 +96,12 @@ def get_events(event: Dict[str, Any]) -> Dict[str, Any]:
         transformed_events = []
         for event_item in events:
             try:
-                event_obj = Event(**event_item)
+                # Handle legacy events that might not have coach_id
+                event_data = event_item.copy()
+                if 'coach_id' not in event_data:
+                    event_data['coach_id'] = event_data.get('created_by', coach_id)
+                
+                event_obj = Event(**event_data)
                 transformed_event = transform_event_for_frontend(event_obj)
                 transformed_events.append(transformed_event)
             except Exception as e:
@@ -130,7 +135,12 @@ def get_event_by_id(event: Dict[str, Any]) -> Dict[str, Any]:
         if 'Item' not in response:
             return create_cors_response(404, {'error': 'Event not found'})
         
-        event_obj = Event(**response['Item'])
+        # Handle legacy events that might not have coach_id
+        event_data = response['Item']
+        if 'coach_id' not in event_data:
+            event_data['coach_id'] = event_data.get('created_by', 'unknown')
+        
+        event_obj = Event(**event_data)
         transformed_event = transform_event_for_frontend(event_obj)
         
         logger.info(f"Retrieved event {event_id}")
@@ -144,7 +154,15 @@ def get_event_by_id(event: Dict[str, Any]) -> Dict[str, Any]:
 def create_event(event: Dict[str, Any]) -> Dict[str, Any]:
     """Create a new event"""
     try:
-        body = json.loads(event.get('body', '{}'))
+        # Parse request body safely
+        body = event.get('body')
+        if body is None:
+            return create_cors_response(400, {'error': 'Request body is required'})
+        
+        try:
+            body = json.loads(body) if isinstance(body, str) else body
+        except json.JSONDecodeError:
+            return create_cors_response(400, {'error': 'Invalid JSON in request body'})
         
         # Validate required fields
         required_fields = ['title', 'start_date', 'end_date', 'coach_id']
@@ -225,7 +243,12 @@ def create_event(event: Dict[str, Any]) -> Dict[str, Any]:
         # Get updated event with Eventbrite details
         updated_response = events_table.get_item(Key={'event_id': event_id})
         if 'Item' in updated_response:
-            updated_event = Event(**updated_response['Item'])
+            # Handle legacy events that might not have coach_id
+            event_data = updated_response['Item']
+            if 'coach_id' not in event_data:
+                event_data['coach_id'] = event_data.get('created_by', body.get('coach_id', 'unknown'))
+            
+            updated_event = Event(**event_data)
             transformed_event = transform_event_for_frontend(updated_event)
         else:
             transformed_event = transform_event_for_frontend(event_obj)
@@ -251,7 +274,15 @@ def update_event(event: Dict[str, Any]) -> Dict[str, Any]:
         if not event_id:
             return create_cors_response(400, {'error': 'event_id is required'})
         
-        body = json.loads(event.get('body', '{}'))
+        # Parse request body safely
+        body = event.get('body')
+        if body is None:
+            return create_cors_response(400, {'error': 'Request body is required'})
+        
+        try:
+            body = json.loads(body) if isinstance(body, str) else body
+        except json.JSONDecodeError:
+            return create_cors_response(400, {'error': 'Invalid JSON in request body'})
         events_table = get_dynamodb_table(get_table_name('events'))
         
         # Get existing event
@@ -259,7 +290,13 @@ def update_event(event: Dict[str, Any]) -> Dict[str, Any]:
         if 'Item' not in response:
             return create_cors_response(404, {'error': 'Event not found'})
         
-        existing_event = Event(**response['Item'])
+        # Handle legacy events that might not have coach_id
+        event_data = response['Item']
+        if 'coach_id' not in event_data:
+            # For legacy events, extract coach_id from event_id or set a default
+            event_data['coach_id'] = event_data.get('created_by', 'unknown')
+        
+        existing_event = Event(**event_data)
         
         # Build update expression dynamically
         update_expressions = []
@@ -329,7 +366,13 @@ def update_event(event: Dict[str, Any]) -> Dict[str, Any]:
             update_kwargs['ExpressionAttributeNames'] = expression_names
         
         response = events_table.update_item(**update_kwargs)
-        updated_event = Event(**response['Attributes'])
+        
+        # Handle legacy events that might not have coach_id
+        event_data = response['Attributes']
+        if 'coach_id' not in event_data:
+            event_data['coach_id'] = event_data.get('created_by', 'unknown')
+        
+        updated_event = Event(**event_data)
         
         # Sync to Eventbrite if event has Eventbrite integration
         sync_service = EventSyncService()

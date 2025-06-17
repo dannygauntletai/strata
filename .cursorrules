@@ -1,186 +1,28 @@
-You are an expert full-stack developer proficient in TypeScript, React, Next.js, and modern UI/UX frameworks (e.g., Tailwind CSS, Shadcn UI, Radix UI). Your task is to produce the most optimized and maintainable Next.js code, following best practices and adhering to the principles of clean code and robust architecture.
+## Template Sections:
 
-### Objective
-- Create a Next.js solution that is not only functional but also adheres to the best practices in performance, security, and maintainability.
+### 1. Issue Summary
+Brief overview of the issue
 
-### Code Style and Structure
-- Write concise, technical TypeScript code with accurate examples.
-- Use functional and declarative programming patterns; avoid classes.
-- Favor iteration and modularization over code duplication.
-- Use descriptive variable names with auxiliary verbs (e.g., `isLoading`, `hasError`).
-- Structure files with exported components, subcomponents, helpers, static content, and types.
-- Use lowercase with dashes for directory names (e.g., `components/auth-wizard`).
+### 2. Problem Statement  
+Clear definition of what needs to be solved
 
-### Optimization and Best Practices
-- Minimize the use of `'use client'`, `useEffect`, and `setState`; favor React Server Components (RSC) and Next.js SSR features.
-- Implement dynamic imports for code splitting and optimization.
-- Use responsive design with a mobile-first approach.
-- Optimize images: use WebP format, include size data, implement lazy loading.
+### 3. Technical Approach
+High-level solution approach and architecture decisions
 
-### Error Handling and Validation
-- Prioritize error handling and edge cases:
-    - Use early returns for error conditions.
-    - Implement guard clauses to handle preconditions and invalid states early.
-    - Use custom error types for consistent error handling.
+### 4. Implementation Plan
+Step-by-step breakdown of implementation tasks
 
-### UI and Styling
-- Use modern UI frameworks (e.g., Tailwind CSS, Shadcn UI, Radix UI) for styling.
-- Implement consistent design and responsive patterns across platforms.
+### 5. Test Plan
+Testing strategy and test cases to write
 
-### State Management and Data Fetching
-- Use modern state management solutions (e.g., Zustand, TanStack React Query) to handle global state and data fetching.
-- Implement validation using Zod for schema validation.
+### 6. Files to Modify
+List of existing files that need changes
 
-### Security and Performance
-- Implement proper error handling, user input validation, and secure coding practices.
-- Follow performance optimization techniques, such as reducing load times and improving rendering efficiency.
+### 7. Files to Create
+New files that need to be created
 
-### Testing and Documentation
-- Write unit tests for components using Jest and React Testing Library.
-- Provide clear and concise comments for complex logic.
-- Use JSDoc comments for functions and components to improve IDE intellisense.
+### 8. Existing Utilities to Leverage
+Project utilities/helpers that can be reused
 
-### Methodology
-1. **System 2 Thinking**: Approach the problem with analytical rigor. Break down the requirements into smaller, manageable parts and thoroughly consider each step before implementation.
-2. **Tree of Thoughts**: Evaluate multiple possible solutions and their consequences. Use a structured approach to explore different paths and select the optimal one.
-3. **Iterative Refinement**: Before finalizing the code, consider improvements, edge cases, and optimizations. Iterate through potential enhancements to ensure the final solution is robust.
-
-**Process**:
-1. **Deep Dive Analysis**: Begin by conducting a thorough analysis of the task at hand, considering the technical requirements and constraints.
-2. **Planning**: Develop a clear plan that outlines the architectural structure and flow of the solution, using <PLANNING> tags if necessary.
-3. **Implementation**: Implement the solution step-by-step, ensuring that each part adheres to the specified best practices.
-4. **Review and Optimize**: Perform a review of the code, looking for areas of potential optimization and improvement.
-5. **Finalization**: Finalize the code by ensuring it meets all requirements, is secure, and is performant.
-
-STOP DEPLOYING LAMBDAS DIRECTLY, USE AWS CDK
-Do not start the frontend server, it is already started
-
-### Common Fixes and Patterns
-
-#### TypeScript Error Handling
-- Always type error parameters in catch blocks: `error instanceof Error ? error.message : String(error)`
-- Use null coalescing operators for optional properties: `analytics?.total_invitations ?? 0`
-- Properly type unknown error objects with instanceof checks
-
-#### Next.js Suspense Boundaries
-- Wrap components using `useSearchParams()` in Suspense boundaries to avoid build errors
-- Add fallback UI for loading states in Suspense boundaries
-
-#### Authentication Patterns
-- Use secure token storage with expiration checking
-- Implement automatic token refresh before expiration
-- Clear all related storage on logout (localStorage, sessionStorage)
-- Use event-driven auth state management for real-time updates
-
-#### Magic Link Authentication Role Support
-- The centralized auth service supports 'coach', 'parent', and 'admin' user roles
-- Admin users get redirected to admin frontend URL (localhost:3001 in dev, admin.domain in prod)
-- Admin emails include admin-specific content and support contact information
-- When adding new user roles, update: role validation, email content, frontend URL routing, and environment variables
-
-#### API Interface Consistency
-- Match frontend TypeScript interfaces with backend API expectations
-- Use simplified data structures (email + message) instead of complex forms
-- Implement proper CORS response helpers in Lambda functions
-
-#### CloudFormation Phantom Resources
-- When seeing "AlreadyExists" errors but resources don't exist in AWS APIs, this is a phantom resource issue
-- CloudFormation has stale metadata references after failed deployments in ROLLBACK_COMPLETE state
-- Solution: Use `aws cloudformation delete-stack` to completely remove stack metadata
-- Enhanced cleanup: Clear CDK context with `rm -f cdk.context.json` and use regional resource scanning
-- For persistent issues: Use "nuclear option" to scan and delete all resources matching naming patterns
-- Always wait for proper AWS propagation (30-60 seconds) after resource deletion
-- **Critical: Verify region consistency** - CDK deployment region must match AWS CLI region
-- **IAM Policy Size**: Use consolidated permissions with wildcard patterns instead of individual resource ARNs to avoid 20KB limit
-- **Proactive cleanup**: Always delete conflicting resources BEFORE attempting deployment
-- **Orphaned resources**: Failed deployments can leave resources without CloudFormation ownership - manually clean up
-
-#### External API Integration Mock Mode Pattern
-- **Issue**: External API integrations (Checkr, SendGrid, etc.) can cause deployment failures when API keys are missing or invalid
-- **Solution**: Implement mock mode pattern that gracefully falls back to mock responses
-- **Pattern**: Check `MOCK_MODE` environment variable, attempt secret retrieval with fallback to mock values
-- **Infrastructure**: Comment out Secrets Manager permissions when in mock mode to avoid dependency issues
-- **Benefits**: Deploy infrastructure before configuring external services, test without API charges, graceful degradation
-- **Testing**: Add mock completion endpoints (e.g., `/mock-complete`) for end-to-end testing without real external APIs
-- **Implementation**: Set `MOCK_MODE=true` in environment variables, use fallback API key pattern, add mock endpoints
-- **Production**: Configure real API keys, set `MOCK_MODE=false`, uncomment Secrets Manager permissions, redeploy
-
-🏗️ Infrastructure Layer (Shared)
-├── 🌐 Networking Stack
-├── 🔐 Security Stack  
-├── 🗄️ Data Stack
-├── 🔑 Passwordless Auth Stack
-└── 🚀 Migration Stack
-
-📱 Application Layer (Portal-Specific)
-├── 👨‍🏫 Coach Portal Service (Coach-only functionality)
-├── 👨‍👩‍👧‍👦 Parent Portal Service (Parent-only functionality)  
-└── 👩‍💼 Admin Portal Service (Admin-only functionality)
-
-🖥️ Frontend Layer
-├── 🎯 Unified Frontend (Coach + Parent with role-based routing)
-└── ⚙️ Admin Frontend (Separate admin interface)
-
-#### Magic Link Authentication Token Handling
-- Magic link tokens are **single-use only** for security - once verified, they cannot be reused
-- Token verification errors (400) like "Token has already been used" are expected behavior
-- Frontend should handle verification responses properly:
-  - Success (200): Store Cognito tokens, redirect to role-specific dashboard
-  - Error (400): Show error message, redirect to login page
-- Always use fresh magic links for testing - used tokens will be rejected
-- Tokens expire after 15 minutes and are automatically cleaned up by DynamoDB TTL
-- Rate limiting: max 3 requests per email per 5 minutes to prevent abuse
-- **CRITICAL**: Avoid duplicate token verification - AuthGuard should skip `/verify` route to prevent race conditions
-- Magic link verification should only happen in dedicated `/verify` page, not in AuthGuard
-- Clear URL parameters after successful verification to prevent re-verification attempts
-
-#### Lambda Function Handler Debugging
-- **Critical**: Every Lambda function must have a `lambda_handler` entry point function
-- If Lambda returns "Handler 'lambda_handler' missing on module" error:
-  1. Add `def lambda_handler(event, context):` function to the module
-  2. Route requests from lambda_handler to appropriate internal handlers
-- Avoid importing environment variables at module load time - use lazy initialization
-- Remove unused imports (especially heavy ones like `qrcode`) that can cause cold start issues
-- Use proper error handling in lambda_handler with CORS response format
-
-#### Magic Link Frontend Integration
-- **CRITICAL**: Always create a `/verify` page component to handle magic link callbacks
-- Magic links redirect to `/verify?token=...&email=...&role=...` 
-- The verify page must extract URL parameters and call the auth verification method
-- Use Suspense boundaries when using `useSearchParams()` in Next.js
-- Handle all verification states: loading, success (redirect to dashboard), error (redirect to login)
-- Update login page to display error messages passed via URL parameters
-- Store authentication tokens in localStorage and update global auth state on success
-
-#### Frontend-Backend API Endpoint Alignment
-- **CRITICAL**: Ensure frontend API calls match backend route handlers exactly
-- Use `adminAPI.authenticatedRequest()` for custom endpoints not in the standard API client
-- Backend routes: `/admin/analytics`, `/admin/utm`, `/admin/analytics/realtime`, `/admin/analytics/events`
-- Frontend should NOT add `/api` prefix - use direct backend endpoints
-- Always use the `adminAPI.getBaseUrl('admin')` method for consistent URL construction
-- Make `getBaseUrl()` method public in API client for external access
-- Implement proper error handling for all API endpoints with fallback data
-
-#### Email Service Integration Patterns  
-- Use AWS Secrets Manager for API keys, not environment variables directly
-- Read secrets using `SENDGRID_SECRET_ARN` environment variable
-- Handle secret retrieval errors gracefully and log appropriately
-- Use proper error messages for missing secrets to aid debugging
-- Always verify email service configuration in Lambda environment variables
-
-#### Lambda Function Debugging Best Practices
-- Add comprehensive logging during debugging, remove after resolution
-- Use CloudWatch logs with proper region specification (us-east-2)
-- Check CloudFormation stack resources to verify Lambda deployment
-- Test API endpoints directly with curl to isolate frontend vs backend issues
-- Verify DynamoDB table contents to confirm data persistence
-- Check for rate limiting and token expiration in testing scenarios
-
-#### Lambda Function Import Failures and Fallback Patterns
-- **Issue**: Lambda imports can fail in deployment environment even when working locally
-- **Symptoms**: 404 errors with wrong error messages (e.g., "Analytics endpoint not found" for `/admin/utm`)
-- **Cause**: Missing files in Lambda package, dependency issues, or CDK bundling problems
-- **Solution**: Implement fallback handlers that detect import failures and provide basic functionality
-- **Pattern**: Check if imported handlers are `None` and route to fallback implementations
-- **Debugging**: Add import status logging and create debug endpoints to verify deployment state
-- **Cleanup**: Remove debug code after identifying and fixing the root cause
+### 9. Success Criteria
+Measurable criteria for completion

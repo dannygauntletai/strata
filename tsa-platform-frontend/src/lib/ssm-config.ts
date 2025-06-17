@@ -1,10 +1,8 @@
 /**
- * SSM Parameter Store Configuration Service
- * NO FALLBACKS - Gets API endpoints from AWS infrastructure or environment variables
+ * Environment Configuration Service
+ * Gets API endpoints from environment variables only
  * Single source of truth for API URLs
  */
-
-import { SSMClient, GetParametersCommand } from '@aws-sdk/client-ssm';
 
 export interface ApiEndpoints {
   adminApi: string;
@@ -13,12 +11,7 @@ export interface ApiEndpoints {
   passwordlessAuth: string;
 }
 
-class SSMConfigService {
-  private readonly region = 'us-east-2'; // TSA infrastructure region (user confirmed)
-  private cache: ApiEndpoints | null = null;
-  private cacheExpiry: number = 0;
-  private readonly cacheTTL = 5 * 60 * 1000; // 5 minutes
-
+class EnvironmentConfigService {
   /**
    * Detect current stage from environment
    */
@@ -29,10 +22,12 @@ class SSMConfigService {
   }
 
   /**
-   * Get API endpoints from environment variables ONLY
-   * NO FALLBACKS - either all variables are set or none are used
+   * Get API endpoints from environment variables
+   * Throws error if any are missing with helpful instructions
    */
-  private getEnvironmentEndpoints(): ApiEndpoints | null {
+  getApiEndpoints(): ApiEndpoints {
+    const stage = this.detectStage();
+    
     const endpoints = {
       adminApi: process.env.NEXT_PUBLIC_TSA_ADMIN_API_URL || '',
       coachApi: process.env.NEXT_PUBLIC_TSA_COACH_API_URL || '',
@@ -41,175 +36,72 @@ class SSMConfigService {
     };
 
     // Check if ALL endpoints are set
-    const hasAllEndpoints = Object.values(endpoints).every(url => url.trim() !== '');
-
-    if (hasAllEndpoints) {
-      console.log('✅ Using API endpoints from environment variables');
-      return endpoints;
-    }
-
-    // If ANY are missing, don't use environment variables
     const missing = Object.entries(endpoints)
-      .filter(([_, url]) => !url)
+      .filter(([_, url]) => !url.trim())
       .map(([key, _]) => key);
 
     if (missing.length > 0) {
-      console.log(`⚠️  Missing environment variables: ${missing.join(', ')}`);
-      console.log('🔄 Will fetch from SSM Parameter Store instead');
-    }
-
-    return null;
-  }
-
-  /**
-   * Fetch API endpoints from SSM Parameter Store
-   */
-  private async fetchFromSSM(): Promise<ApiEndpoints> {
-    const stage = this.detectStage();
-    const ssmClient = new SSMClient({ region: this.region });
-
-    // Define SSM parameter names
-    const parameterNames = [
-      `/tsa/${stage}/api-urls/admin-api`,
-      `/tsa/${stage}/api-urls/coach-api`,
-      `/tsa/${stage}/api-urls/parent-api`,
-      `/tsa/${stage}/api-urls/passwordless-auth`,
-    ];
-
-    try {
-      console.log(`🔍 Fetching API URLs from SSM Parameter Store (${this.region}, ${stage})`);
-      
-      const command = new GetParametersCommand({
-        Names: parameterNames,
-        WithDecryption: false,
+      const envVarNames = missing.map(key => {
+        const envMap = {
+          adminApi: 'NEXT_PUBLIC_TSA_ADMIN_API_URL',
+          coachApi: 'NEXT_PUBLIC_TSA_COACH_API_URL', 
+          parentApi: 'NEXT_PUBLIC_TSA_PARENT_API_URL',
+          passwordlessAuth: 'NEXT_PUBLIC_TSA_AUTH_API_URL'
+        };
+        return envMap[key as keyof typeof envMap];
       });
 
-      const response = await ssmClient.send(command);
-      const parameters = response.Parameters || [];
-
-      // Check if we got all required parameters
-      if (parameters.length !== parameterNames.length) {
-        const foundParams = parameters.map(p => p.Name);
-        const missingParams = parameterNames.filter(name => !foundParams.includes(name));
-        
-        throw new Error(`❌ Missing SSM parameters: ${missingParams.join(', ')}\n` +
-          `📋 Found: ${foundParams.join(', ')}\n` +
-          `💡 Deploy infrastructure: cd tsa-infrastructure && cdk deploy --all`);
-      }
-
-      // Map parameters to endpoints
-      const endpoints: ApiEndpoints = {
-        adminApi: '',
-        coachApi: '',
-        parentApi: '',
-        passwordlessAuth: '',
-      };
-
-      parameters.forEach(param => {
-        if (!param.Name || !param.Value) return;
-        
-        if (param.Name.includes('admin-api')) {
-          endpoints.adminApi = param.Value;
-        } else if (param.Name.includes('coach-api')) {
-          endpoints.coachApi = param.Value;
-        } else if (param.Name.includes('parent-api')) {
-          endpoints.parentApi = param.Value;
-        } else if (param.Name.includes('passwordless-auth')) {
-          endpoints.passwordlessAuth = param.Value;
-        }
-      });
-
-      // Validate all endpoints are set
-      const missing = Object.entries(endpoints)
-        .filter(([_, url]) => !url)
-        .map(([key, _]) => key);
-
-      if (missing.length > 0) {
-        throw new Error(`❌ SSM parameters returned empty values: ${missing.join(', ')}`);
-      }
-
-      console.log('✅ API endpoints loaded from SSM Parameter Store');
-      return endpoints;
-
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`❌ Failed to fetch from SSM Parameter Store: ${error.message}\n` +
-          `🔧 Troubleshooting:\n` +
-          `   1. Check AWS credentials\n` +
-          `   2. Verify region: ${this.region}\n` +
-          `   3. Deploy infrastructure: cd tsa-infrastructure && cdk deploy --all`);
-      }
-      throw error;
+      throw new Error(`❌ Missing required environment variables: ${envVarNames.join(', ')}\n\n` +
+        `🔧 To fix this:\n` +
+        `1. Create a .env.local file in your project root\n` +
+        `2. Add the missing variables:\n\n` +
+        envVarNames.map(varName => `${varName}=https://your-api-endpoint.amazonaws.com/`).join('\n') +
+        `\n\n💡 Get current API URLs:\n` +
+        `   cd tsa-infrastructure\n` +
+        `   aws cloudformation describe-stacks --stack-name tsa-coach-backend-${stage} --query 'Stacks[0].Outputs[?contains(OutputKey,\`API\`)].OutputValue' --output text\n` +
+        `   aws cloudformation describe-stacks --stack-name tsa-admin-backend-${stage} --query 'Stacks[0].Outputs[?contains(OutputKey,\`API\`)].OutputValue' --output text\n` +
+        `   aws cloudformation describe-stacks --stack-name tsa-infra-auth-${stage} --query 'Stacks[0].Outputs[?contains(OutputKey,\`API\`)].OutputValue' --output text`
+      );
     }
+
+    console.log(`✅ API endpoints loaded from environment variables (${stage})`);
+    return endpoints;
   }
 
   /**
-   * Get API endpoints - Environment variables first, then SSM, no fallbacks
+   * Get specific API URL with fallback error message
    */
-  async getApiEndpoints(): Promise<ApiEndpoints> {
-    // 1. Try environment variables first (for local development)
-    const envEndpoints = this.getEnvironmentEndpoints();
-    if (envEndpoints) {
-      return envEndpoints;
-    }
-
-    // 2. Check cache for SSM data
-    if (this.cache && Date.now() < this.cacheExpiry) {
-      console.log('✅ Using cached SSM endpoints');
-      return this.cache;
-    }
-
-    // 3. Fetch from SSM Parameter Store
+  getApiUrl(apiType: keyof ApiEndpoints): string {
     try {
-      const ssmEndpoints = await this.fetchFromSSM();
-      
-      // Cache the result
-      this.cache = ssmEndpoints;
-      this.cacheExpiry = Date.now() + this.cacheTTL;
-      
-      return ssmEndpoints;
+      const endpoints = this.getApiEndpoints();
+      return endpoints[apiType];
     } catch (error) {
-      // Clear cache on error
-      this.cache = null;
-      this.cacheExpiry = 0;
+      console.error(`Failed to get ${apiType} API URL:`, error);
       throw error;
     }
-  }
-
-  /**
-   * Clear cache (force fresh SSM read)
-   */
-  clearCache(): void {
-    this.cache = null;
-    this.cacheExpiry = 0;
-    console.log('🔄 SSM cache cleared');
   }
 }
 
 // Export singleton instance
-export const ssmConfigService = new SSMConfigService();
+export const configService = new EnvironmentConfigService();
 
 // Export convenience functions
-export async function getApiEndpoints(): Promise<ApiEndpoints> {
-  return await ssmConfigService.getApiEndpoints();
+export function getApiEndpoints(): ApiEndpoints {
+  return configService.getApiEndpoints();
 }
 
-export async function getCoachApiUrl(): Promise<string> {
-  const endpoints = await getApiEndpoints();
-  return endpoints.coachApi;
+export function getCoachApiUrl(): string {
+  return configService.getApiUrl('coachApi');
 }
 
-export async function getParentApiUrl(): Promise<string> {
-  const endpoints = await getApiEndpoints();
-  return endpoints.parentApi;
+export function getParentApiUrl(): string {
+  return configService.getApiUrl('parentApi');
 }
 
-export async function getAdminApiUrl(): Promise<string> {
-  const endpoints = await getApiEndpoints();
-  return endpoints.adminApi;
+export function getAdminApiUrl(): string {
+  return configService.getApiUrl('adminApi');
 }
 
-export async function getPasswordlessAuthUrl(): Promise<string> {
-  const endpoints = await getApiEndpoints();
-  return endpoints.passwordlessAuth;
+export function getPasswordlessAuthUrl(): string {
+  return configService.getApiUrl('passwordlessAuth');
 } 

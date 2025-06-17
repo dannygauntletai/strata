@@ -43,9 +43,12 @@ function SettingsContent() {
 
   // Load API endpoint from SSM
   useEffect(() => {
-    getCoachApiUrl().then(setApiBaseUrl).catch(error => {
-      console.error('Failed to load API endpoint:', error)
-    })
+    try {
+      const url = getCoachApiUrl();
+      setApiBaseUrl(url);
+    } catch (error) {
+      console.error('Failed to load API endpoint:', error);
+    }
   }, [])
 
   // Load profile photo on component mount

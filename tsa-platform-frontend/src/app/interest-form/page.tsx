@@ -31,10 +31,12 @@ export default function InterestForm() {
 
   // Load API endpoint from SSM
   useEffect(() => {
-    getCoachApiUrl().then(setApiBaseUrl).catch(error => {
-      console.error('Failed to load API endpoint:', error)
-      setError('Failed to load configuration. Please refresh the page.')
-    })
+    try {
+      const url = getCoachApiUrl();
+      setApiBaseUrl(url);
+    } catch (error) {
+      console.error('Failed to load API endpoint:', error);
+    }
   }, [])
 
   const handleInputChange = (field: keyof typeof formData, value: any) => {

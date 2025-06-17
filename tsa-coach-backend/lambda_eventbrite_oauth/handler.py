@@ -25,6 +25,28 @@ logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 # Environment variables
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
+def get_api_base_url(context=None):
+    """Get the API Gateway base URL dynamically"""
+    # Try environment variable first
+    if 'API_BASE_URL' in os.environ:
+        return os.environ['API_BASE_URL']
+    
+    # Construct from Lambda context and environment
+    stage = os.environ.get('STAGE', 'dev')
+    region = os.environ.get('AWS_REGION', 'us-east-2')
+    
+    # If we have context, we can get the account ID from it
+    if context and hasattr(context, 'invoked_function_arn'):
+        # Extract account ID from Lambda function ARN: arn:aws:lambda:region:account:function:name
+        account_id = context.invoked_function_arn.split(':')[4]
+    else:
+        # Fallback to current account (this should work in Lambda environment)
+        account_id = "164722634547"  # Your account ID
+    
+    # The API Gateway ID pattern for coach service
+    # This is less reliable but works as a fallback
+    return f"https://h6wgy6f3r4.execute-api.{region}.amazonaws.com/{stage}"
+
 # Cache for Eventbrite credentials (retrieved once per Lambda instance)
 _eventbrite_credentials = None
 
@@ -45,9 +67,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         path = event.get('path', '')
         
         if '/oauth/authorize' in path and http_method == 'GET':
-            return handle_oauth_start(event)
+            return handle_oauth_start(event, context)
         elif '/oauth/callback' in path and http_method == 'GET':
-            return handle_oauth_callback(event)
+            return handle_oauth_callback(event, context)
         elif '/oauth/status' in path and http_method == 'GET':
             return handle_oauth_status(event)
         elif '/oauth/disconnect' in path and http_method == 'POST':
@@ -76,7 +98,7 @@ def create_cors_response(status_code: int, body: dict) -> dict:
     }
 
 
-def handle_oauth_start(event: Dict[str, Any]) -> Dict[str, Any]:
+def handle_oauth_start(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Start OAuth flow - generate authorization URL"""
     try:
         # Get coach_id from query parameters
@@ -100,8 +122,9 @@ def handle_oauth_start(event: Dict[str, Any]) -> Dict[str, Any]:
         # Generate state parameter for security
         state = generate_oauth_state(coach_id)
         
-        # Build redirect URI
-        redirect_uri = f"{FRONTEND_URL}/api/eventbrite/oauth/callback"
+        # Build redirect URI - should point to our backend API, not frontend
+        # The callback will be handled by this same Lambda function via API Gateway
+        redirect_uri = f"{get_api_base_url(context)}/eventbrite/oauth/callback"
         
         # Generate OAuth URL
         oauth_url = EventbriteClient.get_oauth_url(
@@ -110,7 +133,9 @@ def handle_oauth_start(event: Dict[str, Any]) -> Dict[str, Any]:
             state=state
         )
         
-        logger.info(f"Generated OAuth URL for coach {coach_id}")
+        logger.info(f"Generated OAuth URL for coach {coach_id}: {oauth_url}")
+        logger.info(f"Redirect URI used: {redirect_uri}")
+        logger.info(f"Client ID used: {client_id}")
         
         return create_cors_response(200, {
             'authorization_url': oauth_url,
@@ -122,7 +147,7 @@ def handle_oauth_start(event: Dict[str, Any]) -> Dict[str, Any]:
         return create_cors_response(500, {'error': str(e)})
 
 
-def handle_oauth_callback(event: Dict[str, Any]) -> Dict[str, Any]:
+def handle_oauth_callback(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Handle OAuth callback - exchange code for token"""
     try:
         query_params = event.get('queryStringParameters') or {}
@@ -155,7 +180,7 @@ def handle_oauth_callback(event: Dict[str, Any]) -> Dict[str, Any]:
             return create_redirect_response(f"{FRONTEND_URL}/coach/settings?eventbrite_error=config_error")
         
         # Exchange code for token
-        redirect_uri = f"{FRONTEND_URL}/api/eventbrite/oauth/callback"
+        redirect_uri = f"{get_api_base_url(context)}/eventbrite/oauth/callback"
         
         token_data = EventbriteClient.exchange_code_for_token(
             client_id=client_id,
@@ -257,7 +282,15 @@ def handle_oauth_status(event: Dict[str, Any]) -> Dict[str, Any]:
 def handle_oauth_disconnect(event: Dict[str, Any]) -> Dict[str, Any]:
     """Disconnect Eventbrite account"""
     try:
-        body = json.loads(event.get('body', '{}'))
+        # Parse request body safely
+        body = event.get('body')
+        if body is None:
+            return create_cors_response(400, {'error': 'Request body is required'})
+        
+        try:
+            body = json.loads(body) if isinstance(body, str) else body
+        except json.JSONDecodeError:
+            return create_cors_response(400, {'error': 'Invalid JSON in request body'})
         coach_id = body.get('coach_id')
         
         if not coach_id:
@@ -290,7 +323,15 @@ def handle_oauth_disconnect(event: Dict[str, Any]) -> Dict[str, Any]:
 def handle_oauth_refresh(event: Dict[str, Any]) -> Dict[str, Any]:
     """Refresh OAuth token"""
     try:
-        body = json.loads(event.get('body', '{}'))
+        # Parse request body safely
+        body = event.get('body')
+        if body is None:
+            return create_cors_response(400, {'error': 'Request body is required'})
+        
+        try:
+            body = json.loads(body) if isinstance(body, str) else body
+        except json.JSONDecodeError:
+            return create_cors_response(400, {'error': 'Invalid JSON in request body'})
         coach_id = body.get('coach_id')
         
         if not coach_id:

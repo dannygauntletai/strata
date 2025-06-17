@@ -3,6 +3,8 @@ Passwordless Authentication Stack - Python Implementation
 Uses core AWS services for magic link email authentication
 """
 import os
+import time
+import random
 from aws_cdk import (
     Stack,
     Duration,
@@ -16,6 +18,7 @@ from aws_cdk import (
     aws_ssm as ssm,
     aws_secretsmanager as secretsmanager,
     BundlingOptions,
+    RemovalPolicy,
 )
 from constructs import Construct
 from typing import Dict, Any
@@ -51,7 +54,7 @@ class PasswordlessAuthStack(Stack):
         # Create User Pool
         self.user_pool = cognito.UserPool(
             self, "TSAUserPool",
-            user_pool_name=f"tsa-unified-v1-{self.stage}",
+            user_pool_name=f"tsa-unified-{self.stage}",
             self_sign_up_enabled=True,
             sign_in_aliases=cognito.SignInAliases(email=True),
             auto_verify=cognito.AutoVerifiedAttrs(email=True),
@@ -79,7 +82,7 @@ class PasswordlessAuthStack(Stack):
         self.user_pool_client = cognito.UserPoolClient(
             self, "TSAUserPoolClient",
             user_pool=self.user_pool,
-            user_pool_client_name=f"tsa-unified-client-v1-{self.stage}",
+            user_pool_client_name=f"tsa-unified-client-{self.stage}",
             auth_flows=cognito.AuthFlow(
                 admin_user_password=True,
                 custom=True,
@@ -108,12 +111,15 @@ class PasswordlessAuthStack(Stack):
             prevent_user_existence_errors=True,
         )
         
-        # Add custom domain
+        # ✅ ARCHITECTURAL FIX: Let CloudFormation manage domain lifecycle properly
+        # Use consistent naming and let CDK/CloudFormation handle "exists vs create" logic
+        domain_prefix = f"tsa-unified-{self.stage}"
+        
         self.user_pool_domain = cognito.UserPoolDomain(
             self, "TSAUserPoolDomain",
             user_pool=self.user_pool,
             cognito_domain=cognito.CognitoDomainOptions(
-                domain_prefix=f"tsa-unified-v1-{self.stage}"
+                domain_prefix=domain_prefix
             )
         )
     
@@ -324,7 +330,7 @@ class PasswordlessAuthStack(Stack):
         """Create API Gateway for passwordless authentication"""
         
         # Create or import log group
-        log_group_name = f"/aws/apigateway/tsa-passwordless-v1-{self.stage}"
+        log_group_name = f"/aws/apigateway/tsa-passwordless-{self.stage}"
         
         try:
             # Try to import existing log group
@@ -365,7 +371,7 @@ class PasswordlessAuthStack(Stack):
                 ]
             ),
             deploy_options=apigateway.StageOptions(
-                stage_name="v1",
+                stage_name=self.stage,
                 access_log_destination=apigateway.LogGroupLogDestination(log_group),
                 access_log_format=apigateway.AccessLogFormat.json_with_standard_fields(
                     caller=True,
@@ -443,13 +449,15 @@ class PasswordlessAuthStack(Stack):
             export_name=f"{self.stage}-TSAUserPoolArn"
         )
         
+        # Export API URL
         CfnOutput(
             self, "PasswordlessApiUrl",
             value=self.api.url,
-            description="Unified Passwordless API URL for magic links (all user types)",
+            description="Passwordless Auth API URL",
             export_name=f"{self.stage}-TSAPasswordlessApiUrl"
         )
         
+        # Export Cognito domain URL
         CfnOutput(
             self, "UserPoolDomainUrl",
             value=f"https://{self.user_pool_domain.domain_name}.auth.{self.region}.amazoncognito.com",
@@ -457,10 +465,10 @@ class PasswordlessAuthStack(Stack):
             export_name=f"{self.stage}-TSAUserPoolDomainUrl"
         )
         
-        # Export API URL to SSM Parameter Store for runtime discovery
+        # Store API URL in SSM Parameter Store for frontend sync
         ssm.StringParameter(
             self, "PasswordlessAuthApiUrlParameter",
-            parameter_name=f"/tsa-coach/{self.stage}/api-urls/passwordlessAuth",
+            parameter_name=f"/tsa/{self.stage}/api-urls/auth",
             string_value=self.api.url,
             description=f"Auto-managed Passwordless Auth API URL for {self.stage} environment"
         )

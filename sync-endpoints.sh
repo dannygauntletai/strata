@@ -40,10 +40,11 @@ echo "================================================="
 
 # Try SSM parameters first (preferred method)
 echo "🔍 Checking SSM Parameter Store..."
-COACH_API=$(get_ssm_parameter "/tsa-coach/$STAGE/api-urls/coachApi")
-PARENT_API=$(get_ssm_parameter "/tsa-coach/$STAGE/api-urls/parentApi")
-ADMIN_API=$(get_ssm_parameter "/tsa-coach/$STAGE/api-urls/adminApi")
-AUTH_API=$(get_ssm_parameter "/tsa-coach/$STAGE/api-urls/passwordlessAuth")
+# ✅ ARCHITECTURAL FIX: Standardized SSM parameter paths (single source of truth)
+COACH_API=$(get_ssm_parameter "/tsa/$STAGE/api-urls/coach")
+PARENT_API=$(get_ssm_parameter "/tsa/$STAGE/api-urls/parent") 
+ADMIN_API=$(get_ssm_parameter "/tsa/$STAGE/api-urls/admin")
+AUTH_API=$(get_ssm_parameter "/tsa/$STAGE/api-urls/auth")
 
 # Fallback to CloudFormation outputs if SSM fails
 if [ -z "$AUTH_API" ]; then
@@ -73,6 +74,11 @@ AUTH_API=${AUTH_API%/}
 [ "$COACH_API" = "NOT_FOUND" ] && COACH_API=""
 [ "$PARENT_API" = "NOT_FOUND" ] && PARENT_API=""
 [ "$ADMIN_API" = "NOT_FOUND" ] && ADMIN_API=""
+
+# Use placeholder for parent API if empty (not deployed yet)
+if [ -z "$PARENT_API" ]; then
+    PARENT_API="https://placeholder-parent-api.tsa.dev/"
+fi
 
 echo ""
 echo "✅ Current API Endpoints:"

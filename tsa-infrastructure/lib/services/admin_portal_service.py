@@ -511,7 +511,7 @@ class AdminPortalService(Construct):
         # Export API URL to SSM Parameter Store for runtime discovery
         ssm.StringParameter(
             self, "AdminAPIUrlParameter",
-            parameter_name=f"/tsa-admin/{self.stage}/api-urls/admin",
+            parameter_name=f"/tsa/{self.stage}/api-urls/admin",  # ✅ STANDARDIZED: Consistent prefix
             string_value=self.api.url,
             description=f"Auto-managed Admin API URL for {self.stage} environment"
         )

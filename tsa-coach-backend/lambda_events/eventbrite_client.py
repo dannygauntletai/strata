@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from dataclasses import dataclass
 import logging
+import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -268,17 +269,29 @@ class EventbriteClient:
     
     @staticmethod
     def get_oauth_url(client_id: str, redirect_uri: str, state: str = None) -> str:
-        """Generate OAuth authorization URL"""
+        """Generate OAuth authorization URL with comprehensive scopes"""
+        import urllib.parse
+        
+        # Request comprehensive scopes for event management
+        scopes = [
+            'event:write',      # Create and modify events
+            'event:read',       # Read event data
+            'user:read',        # Read user profile information
+            'organization:read' # Read organization details
+        ]
+        
         params = {
             'response_type': 'code',
             'client_id': client_id,
             'redirect_uri': redirect_uri,
+            'scope': ' '.join(scopes)  # Space-separated scopes
         }
         
         if state:
             params['state'] = state
         
-        param_string = '&'.join([f'{k}={v}' for k, v in params.items()])
+        # Use proper URL encoding
+        param_string = urllib.parse.urlencode(params)
         return f"{EventbriteClient.OAUTH_URL}/authorize?{param_string}"
     
     @staticmethod

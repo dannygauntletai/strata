@@ -5,8 +5,12 @@ Handles coach self-service profile updates including preferences and tour comple
 import json
 import os
 import boto3
+import sys
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
+
+# Add shared layer to path
+sys.path.append('/opt/python')
 
 # Import from local directory (copied shared utilities)
 from shared_utils import (
@@ -17,7 +21,7 @@ from shared_utils import (
     standardize_error_response,
     get_current_timestamp
 )
-from dynamodb_models import CoachProfile
+# CoachProfile import removed - not used in this handler
 from user_identifier import UserIdentifier
 
 

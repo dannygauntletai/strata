@@ -95,7 +95,7 @@ function CreateEventContent() {
     }
   }, [searchParams])
 
-  const handleInputChange = (field: keyof EventFormData, value: string | boolean | string[]) => {
+  const handleInputChange = (field: keyof EventFormData, value: string | boolean | string[] | TicketType[]) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -534,8 +534,6 @@ function CreateEventContent() {
             </div>
           </div>
         </div>
-
-
 
         {/* Form Actions */}
         <div className="flex flex-col sm:flex-row gap-4 pt-6">

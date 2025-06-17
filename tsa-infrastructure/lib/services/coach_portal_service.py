@@ -185,6 +185,7 @@ class CoachPortalService(Construct):
                 "USERS_TABLE": self.shared_table_names["users"],
                 "PROFILES_TABLE": self.shared_table_names["profiles"],
                 "INVITATIONS_TABLE": self.shared_table_names["invitations"],
+                "EVENT_INVITATIONS_TABLE": self.shared_table_names["invitations"],  # Alias for invitations handler
                 "ENROLLMENTS_TABLE": self.shared_table_names["enrollments"],
                 "EVENTS_TABLE": self.shared_table_names["events"],
                 "DOCUMENTS_TABLE": self.shared_table_names["documents"],
@@ -274,6 +275,15 @@ class CoachPortalService(Construct):
             **lambda_config
         )
         
+        # Invitations function - handles parent invitations from coaches
+        self.invitations_function = lambda_.Function(
+            self, "InvitationsHandler",
+            function_name=self.resource_config.get_lambda_names()["coach_invitations"],
+            code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_invitations"),
+            handler="invitations_handler.lambda_handler",  # RESTORED: Use full handler with Lambda layer
+            **lambda_config
+        )
+        
         # Grant necessary permissions
         self._grant_table_permissions()
         self._grant_secrets_permissions()
@@ -292,7 +302,8 @@ class CoachPortalService(Construct):
             self.profile_function,
             self.events_function,
             self.background_function,
-            self.eventbrite_oauth_function
+            self.eventbrite_oauth_function,
+            self.invitations_function
         ]
         
         for function in functions:
@@ -319,6 +330,7 @@ class CoachPortalService(Construct):
                 iam.PolicyStatement(
                     effect=iam.Effect.ALLOW,
                     actions=[
+                        "dynamodb:DescribeTable",  # Required for table metadata operations
                         "dynamodb:GetItem",
                         "dynamodb:PutItem", 
                         "dynamodb:UpdateItem",
@@ -338,8 +350,9 @@ class CoachPortalService(Construct):
         # Get Stack context for region and account
         stack = Stack.of(self)
         
-        # Construct Eventbrite secret ARN  
+        # Construct secret ARNs
         eventbrite_secret_arn = "arn:aws:secretsmanager:us-east-2:164722634547:secret:eventbrite-api-credentials-aDZtV9"
+        database_secret_arn = self.shared_resources.get("database_secret_arn", "arn:aws:secretsmanager:us-east-2:164722634547:secret:tsa/database-dev-bqRyem")
         
         # Functions that need Eventbrite credentials
         eventbrite_functions = [
@@ -347,6 +360,17 @@ class CoachPortalService(Construct):
             self.eventbrite_oauth_function
         ]
         
+        # Functions that need database credentials  
+        database_functions = [
+            self.onboarding_function,
+            self.profile_function,
+            self.events_function,
+            self.background_function,
+            self.eventbrite_oauth_function,  # Also needs database access for shared utilities
+            self.invitations_function  # Needs database access for invitation management
+        ]
+        
+        # Grant Eventbrite secret access
         for function in eventbrite_functions:
             function.add_to_role_policy(
                 iam.PolicyStatement(
@@ -356,6 +380,19 @@ class CoachPortalService(Construct):
                         "secretsmanager:DescribeSecret"
                     ],
                     resources=[eventbrite_secret_arn]
+                )
+            )
+        
+        # Grant database secret access
+        for function in database_functions:
+            function.add_to_role_policy(
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "secretsmanager:GetSecretValue",
+                        "secretsmanager:DescribeSecret"
+                    ],
+                    resources=[database_secret_arn]
                 )
             )
         
@@ -558,6 +595,28 @@ class CoachPortalService(Construct):
         background_resource.add_method("GET", background_integration)
         background_resource.add_method("POST", background_integration)
         
+        # Parent invitations endpoints - ARCHITECTURAL FIX: Add missing API Gateway routes
+        parent_invitations_resource = self.api.root.add_resource("parent-invitations")
+        invitations_integration = apigateway.LambdaIntegration(self.invitations_function)
+        
+        # Main parent invitations endpoints
+        parent_invitations_resource.add_method("GET", invitations_integration)
+        parent_invitations_resource.add_method("POST", invitations_integration)
+        
+        # Individual invitation management
+        parent_invitation_id_resource = parent_invitations_resource.add_resource("{invitation_id}")
+        parent_invitation_id_resource.add_method("GET", invitations_integration)
+        parent_invitation_id_resource.add_method("PUT", invitations_integration)
+        parent_invitation_id_resource.add_method("DELETE", invitations_integration)
+        
+        # Bulk operations
+        parent_invitations_bulk_resource = parent_invitations_resource.add_resource("bulk")
+        parent_invitations_bulk_resource.add_method("POST", invitations_integration)
+        
+        # Send operations
+        parent_invitations_send_resource = parent_invitations_resource.add_resource("send")
+        parent_invitations_send_resource.add_method("POST", invitations_integration)
+        
         # Grant API Gateway invoke permissions to Lambda functions
         # These are ESSENTIAL - without them, API Gateway gets 403 errors when calling Lambda
         self.onboarding_function.add_permission(
@@ -586,6 +645,12 @@ class CoachPortalService(Construct):
         
         self.eventbrite_oauth_function.add_permission(
             "EventbriteOAuthAPIGatewayInvoke",
+            principal=iam.ServicePrincipal("apigateway.amazonaws.com"),
+            source_arn=f"{self.api.arn_for_execute_api()}/*/*/*"
+        )
+        
+        self.invitations_function.add_permission(
+            "InvitationsAPIGatewayInvoke",
             principal=iam.ServicePrincipal("apigateway.amazonaws.com"),
             source_arn=f"{self.api.arn_for_execute_api()}/*/*/*"
         )
@@ -661,10 +726,10 @@ class CoachPortalService(Construct):
             export_name=f"tsa-coach-backend-{self.stage}:EventAttendeesTable"
         )
         
-        # Store API URL in SSM Parameter Store for frontend configuration
+        # Store coach API URL for frontend sync scripts
         ssm.StringParameter(
             self, "CoachAPIEndpointParameter",
-            parameter_name=f"/tsa/{self.stage}/api-endpoints/coach",
+            parameter_name=f"/tsa/{self.stage}/api-urls/coach",
             string_value=self.api.url,
             description=f"Coach Portal API endpoint for {self.stage} environment"
         )

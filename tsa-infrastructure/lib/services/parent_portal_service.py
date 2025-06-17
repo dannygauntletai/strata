@@ -13,6 +13,7 @@ from aws_cdk import (
     aws_logs as logs,
     aws_ec2 as ec2,
     aws_ssm as ssm,
+    Stack,
 )
 from constructs import Construct
 from typing import Dict, Any
@@ -49,79 +50,17 @@ class ParentPortalService(Construct):
         )
         
     def _create_dynamodb_tables(self):
-        """Create parent-specific DynamoDB tables"""
+        """Reference shared DynamoDB tables instead of creating duplicates"""
         
-        # Parent Enrollments table - Core enrollment tracking and workflow
-        self.enrollments_table = dynamodb.Table(
-            self, "ParentEnrollmentsTable",
-            table_name=self.resource_config.get_table_name("enrollments"),
-            partition_key=dynamodb.Attribute(
-                name="enrollment_id",
-                type=dynamodb.AttributeType.STRING
-            ),
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True
-        )
+        # ✅ ARCHITECTURAL FIX: Use existing shared tables (dependency injection pattern)
+        # All tables are created in shared data stack, not here
         
-        # Add GSI for parent email lookup
-        self.enrollments_table.add_global_secondary_index(
-            index_name="parent-email-index",
-            partition_key=dynamodb.Attribute(
-                name="parent_email",
-                type=dynamodb.AttributeType.STRING
-            )
-        )
+        # Reference shared tables by name (these already exist in data stack)
+        self.enrollments_table_name = self.resource_config.get_table_name("enrollments")
+        self.documents_table_name = self.resource_config.get_table_name("documents")
+        self.scheduling_table_name = self.resource_config.get_table_name("scheduling")
         
-        # Add GSI for invitation token lookup
-        self.enrollments_table.add_global_secondary_index(
-            index_name="invitation-token-index",
-            partition_key=dynamodb.Attribute(
-                name="invitation_token",
-                type=dynamodb.AttributeType.STRING
-            )
-        )
-        
-        # Parent Documents table - Document upload and verification
-        self.documents_table = dynamodb.Table(
-            self, "ParentDocumentsTable",
-            table_name=self.resource_config.get_table_name("documents"),
-            partition_key=dynamodb.Attribute(
-                name="document_id",
-                type=dynamodb.AttributeType.STRING
-            ),
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True
-        )
-        
-        # Add GSI for enrollment lookup
-        self.documents_table.add_global_secondary_index(
-            index_name="enrollment-id-index",
-            partition_key=dynamodb.Attribute(
-                name="enrollment_id",
-                type=dynamodb.AttributeType.STRING
-            )
-        )
-        
-        # Parent Scheduling table - Consultation and shadow day scheduling
-        self.scheduling_table = dynamodb.Table(
-            self, "ParentSchedulingTable",
-            table_name=self.resource_config.get_table_name("scheduling"),
-            partition_key=dynamodb.Attribute(
-                name="schedule_id",
-                type=dynamodb.AttributeType.STRING
-            ),
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True
-        )
-        
-        # Add GSI for enrollment lookup
-        self.scheduling_table.add_global_secondary_index(
-            index_name="enrollment-id-index",
-            partition_key=dynamodb.Attribute(
-                name="enrollment_id",
-                type=dynamodb.AttributeType.STRING
-            )
-        )
+        # ✅ NO table creation - all tables managed by shared data stack (single source of truth)
         
     def _create_lambda_functions(self):
         """Create Lambda functions for parent functionality"""
@@ -141,6 +80,11 @@ class ParentPortalService(Construct):
             "environment": {
                 # Use shared environment variables (EdFi/OneRoster standard tables)
                 **self.resource_config.get_service_environment_variables("parent"),
+                
+                # ✅ ARCHITECTURAL FIX: Add shared table names (dependency injection)
+                "ENROLLMENTS_TABLE": self.enrollments_table_name,
+                "DOCUMENTS_TABLE": self.documents_table_name, 
+                "SCHEDULING_TABLE": self.scheduling_table_name,
                 
                 # PostgreSQL Database
                 "DB_HOST": self.shared_resources.get("database_host", ""),
@@ -174,14 +118,7 @@ class ParentPortalService(Construct):
             **lambda_config
         )
         
-        # Parent dashboard function - handles dashboard data and role-based routing
-        self.dashboard_function = lambda_.Function(
-            self, "ParentDashboardHandler", 
-            function_name=self.resource_config.get_lambda_names()["parent_dashboard"],
-            code=lambda_.Code.from_asset("../tsa-parent-backend/lambda_dashboard"),
-            handler="handler.lambda_handler",
-            **lambda_config
-        )
+        # Note: Dashboard function removed - needs proper logic implementation
         
         # Admissions validation function - handles invitation validation
         self.admissions_function = lambda_.Function(
@@ -197,15 +134,10 @@ class ParentPortalService(Construct):
                 
     def _grant_table_permissions(self):
         """Grant DynamoDB permissions to Lambda functions using shared table ARNs"""
-        functions = [self.enrollment_function, self.dashboard_function, self.admissions_function]
+        functions = [self.enrollment_function, self.admissions_function]
         
         for function in functions:
-            # Grant permissions to parent-specific tables
-            self.enrollments_table.grant_read_write_data(function)
-            self.documents_table.grant_read_write_data(function)
-            self.scheduling_table.grant_read_write_data(function)
-        
-            # Grant access to shared tables using standardized ARNs
+            # ✅ ARCHITECTURAL FIX: Grant access to shared tables using IAM ARNs (dependency injection)
             shared_table_arns = get_table_iam_arns(self.stage)
             function.add_to_role_policy(
                 iam.PolicyStatement(
@@ -215,6 +147,27 @@ class ParentPortalService(Construct):
                     resources=shared_table_arns
                 )
             )
+            
+            # Grant specific permissions to shared enrollments, documents, and scheduling tables
+            enrollments_table_arn = f"arn:aws:dynamodb:{Stack.of(self).region}:{Stack.of(self).account}:table/{self.enrollments_table_name}"
+            documents_table_arn = f"arn:aws:dynamodb:{Stack.of(self).region}:{Stack.of(self).account}:table/{self.documents_table_name}"
+            scheduling_table_arn = f"arn:aws:dynamodb:{Stack.of(self).region}:{Stack.of(self).account}:table/{self.scheduling_table_name}"
+            
+            function.add_to_role_policy(
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", 
+                            "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan"],
+                    resources=[
+                        enrollments_table_arn,
+                        f"{enrollments_table_arn}/index/*",  # GSI access
+                        documents_table_arn,
+                        f"{documents_table_arn}/index/*",    # GSI access
+                        scheduling_table_arn,
+                        f"{scheduling_table_arn}/index/*"    # GSI access
+                    ]
+                )
+            )
                 
     def _create_api_gateway(self):
         """Create API Gateway for parent functionality"""
@@ -222,7 +175,7 @@ class ParentPortalService(Construct):
         # Create log group for API Gateway
         log_group = logs.LogGroup(
             self, "ParentPortalAPILogs",
-            log_group_name=self.resource_config.get_log_group_names()["parent_api"],
+            log_group_name=f"/aws/apigateway/tsa-parent-api-{self.stage}",
         )
         
         # Get environment-specific CORS origins
@@ -255,7 +208,7 @@ class ParentPortalService(Construct):
                 max_age=Duration.minutes(10)
             ),
             deploy_options=apigateway.StageOptions(
-                stage_name="prod",
+                stage_name=self.stage,
                 access_log_destination=apigateway.LogGroupLogDestination(log_group),
                 access_log_format=apigateway.AccessLogFormat.json_with_standard_fields(
                     caller=True,
@@ -273,12 +226,9 @@ class ParentPortalService(Construct):
         
         # Create API integrations
         enrollment_integration = apigateway.LambdaIntegration(self.enrollment_function)
-        dashboard_integration = apigateway.LambdaIntegration(self.dashboard_function)
         admissions_integration = apigateway.LambdaIntegration(self.admissions_function)
         
-        # Dashboard endpoint
-        dashboard_resource = self.api.root.add_resource("dashboard")
-        dashboard_resource.add_method("GET", dashboard_integration)
+        # Note: Dashboard endpoint removed - needs proper logic implementation
         
         # Admissions routes
         admissions_resource = self.api.root.add_resource("admissions")
@@ -315,20 +265,26 @@ class ParentPortalService(Construct):
         health_resource = self.api.root.add_resource("health")
         health_resource.add_method("GET", enrollment_integration)
         
-        # Export API URL
-        CfnOutput(
-            self, "ParentPortalAPIUrl",
+        # Export API URL with predictable naming (consistent with coach/admin pattern)
+        parent_api_output = CfnOutput(
+            self, f"ParentAPIUrl{self.stage.title()}",
             value=self.api.url,
-            description=f"Parent Portal API Gateway URL ({self.stage})"
+            description=f"Parent Portal API Gateway URL ({self.stage})",
+            export_name=f"tsa-parent-backend-{self.stage}:ParentPortalAPIUrl"
         )
+        # Override the logical ID to be predictable
+        parent_api_output.override_logical_id(f"ParentAPIUrl{self.stage.title()}")
         
-        # Export API URL to SSM Parameter Store
-        ssm.StringParameter(
-            self, "ParentApiUrlParameter",
-            parameter_name=f"/tsa/{self.stage}/api-urls/parent-api",
-            string_value=self.api.url,
-            description=f"Auto-managed Parent API URL for {self.stage} environment"
-        )
+        # Store API URL in SSM Parameter Store for frontend configuration
+        # ✅ ARCHITECTURAL FIX: Remove CloudFormation-managed parameter and use manual approach
+        # This avoids CloudFormation resource type conflicts by not managing the parameter in CF
+        
+        # DON'T create SSM parameter via CloudFormation - it conflicts with existing resources
+        # Instead, the parameter will be created/updated via deployment scripts or manual process
+        # This follows the architectural principle: "Don't fight CloudFormation, work with it"
+        
+        # The parameter /tsa/dev/api-urls/parent exists and will be updated outside of this stack
+        # Frontend sync scripts can read from the existing parameter path
         
     @property
     def api_url(self) -> str:

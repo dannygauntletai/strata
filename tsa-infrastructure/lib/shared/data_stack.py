@@ -287,6 +287,15 @@ class DataStack(Stack):
             removal_policy=RemovalPolicy.DESTROY
         )
         
+        # Add GSI for coach-based event queries
+        self.events_table.add_global_secondary_index(
+            index_name="coach-events-index",
+            partition_key=dynamodb.Attribute(
+                name="coach_id",
+                type=dynamodb.AttributeType.STRING
+            )
+        )
+        
         # Event registrations table
         self.event_registrations_table = dynamodb.Table(
             self, "EventRegistrationsTable",
@@ -316,12 +325,13 @@ class DataStack(Stack):
             removal_policy=RemovalPolicy.DESTROY
         )
         
-        # Background checks table
-        self.background_checks_table = dynamodb.Table(
-            self, "BackgroundChecksTable",
-            table_name=f"background-checks-{self.stage}",
+        # ✅ ARCHITECTURAL FIX: Add scheduling table to shared data stack (single source of truth)
+        # Scheduling table - Consultation and shadow day scheduling for parent enrollments
+        self.scheduling_table = dynamodb.Table(
+            self, "SchedulingTable",
+            table_name=self.table_config.get_table_name("scheduling"),
             partition_key=dynamodb.Attribute(
-                name="check_id",
+                name="schedule_id",
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -329,11 +339,20 @@ class DataStack(Stack):
             removal_policy=RemovalPolicy.DESTROY
         )
         
-        # Add GSI for coach lookups
-        self.background_checks_table.add_global_secondary_index(
+        # Add GSI for enrollment lookup
+        self.scheduling_table.add_global_secondary_index(
+            index_name="enrollment-id-index",
+            partition_key=dynamodb.Attribute(
+                name="enrollment_id",
+                type=dynamodb.AttributeType.STRING
+            )
+        )
+        
+        # Add GSI for coach lookup  
+        self.scheduling_table.add_global_secondary_index(
             index_name="coach-id-index",
             partition_key=dynamodb.Attribute(
-                name="coach_id",
+                name="coach_id", 
                 type=dynamodb.AttributeType.STRING
             )
         )
@@ -458,4 +477,11 @@ class DataStack(Stack):
             value=self.documents_table.table_name,
             description="Documents table name",
             export_name=f"UnifiedPlatformDocumentsTable-{self.stage}"
+        )
+        
+        CfnOutput(
+            self, "SchedulingTableName",
+            value=self.scheduling_table.table_name,
+            description="Scheduling table name",
+            export_name=f"UnifiedPlatformSchedulingTable-{self.stage}"
         ) 

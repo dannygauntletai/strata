@@ -149,7 +149,7 @@ function EventsContent() {
         const user = getCurrentUser()
         if (!user?.email) return
 
-        const apiUrl = await getCoachApiUrl()
+        const apiUrl = getCoachApiUrl()
         const response = await fetch(`${apiUrl}/coach/google-calendar/status?coach_email=${encodeURIComponent(user.email)}`)
         
         if (response.ok) {
@@ -170,8 +170,8 @@ function EventsContent() {
         const user = getCurrentUser()
         if (!user?.email) return
 
-        const apiUrl = await getCoachApiUrl()
-        const response = await fetch(`${apiUrl}/eventbrite/oauth/status`)
+        const apiUrl = getCoachApiUrl()
+        const response = await fetch(`${apiUrl}/eventbrite/oauth/status?coach_id=${encodeURIComponent(user.email)}`)
         
         if (response.ok) {
           const data = await response.json()
@@ -231,13 +231,21 @@ function EventsContent() {
   // Connect to Eventbrite
   const handleConnectEventbrite = async () => {
     try {
-      const apiUrl = await getCoachApiUrl()
-      const response = await fetch(`${apiUrl}/eventbrite/oauth/authorize`)
+      const user = getCurrentUser()
+      if (!user?.email) {
+        alert('Please log in to connect Eventbrite')
+        return
+      }
+
+      const apiUrl = getCoachApiUrl()
+      const response = await fetch(`${apiUrl}/eventbrite/oauth/authorize?coach_id=${encodeURIComponent(user.email)}`)
       
       if (response.ok) {
         const data = await response.json()
         window.location.href = data.authorization_url
       } else {
+        const errorText = await response.text()
+        console.error('Eventbrite OAuth error:', errorText)
         alert('Failed to initiate Eventbrite connection')
       }
     } catch (error) {
@@ -261,7 +269,7 @@ function EventsContent() {
         }
 
         // Call Lambda API with coach filtering
-        const apiUrl = await getCoachApiUrl()
+        const apiUrl = getCoachApiUrl()
         const response = await fetch(`${apiUrl}/events?created_by=${encodeURIComponent(user.email)}`)
         if (!response.ok) {
           throw new Error('Failed to fetch events')
@@ -286,7 +294,7 @@ function EventsContent() {
       const user = getCurrentUser()
       if (!user?.email) return
 
-      const apiUrl = await getCoachApiUrl()
+      const apiUrl = getCoachApiUrl()
       const response = await fetch(`${apiUrl}/events?created_by=${encodeURIComponent(user.email)}`)
       if (!response.ok) return
 
@@ -366,7 +374,7 @@ function EventsContent() {
     
     try {
       setDeleteLoading(true)
-      const apiUrl = await getCoachApiUrl()
+      const apiUrl = getCoachApiUrl()
       const response = await fetch(`${apiUrl}/events/${eventToDelete.event_id}`, {
         method: 'DELETE'
       })
@@ -488,7 +496,6 @@ function EventsContent() {
                   </p>
                 </div>
                 <Button 
-                  size="sm"
                   outline
                   onClick={handleConnectEventbrite}
                   className="border-orange-300 text-orange-700 hover:bg-orange-100"
@@ -523,7 +530,6 @@ function EventsContent() {
                   </p>
                 </div>
                 <Button 
-                  size="sm"
                   outline
                   href="/coach/profile#calendar-integration"
                   className="border-blue-300 text-blue-700 hover:bg-blue-100"
