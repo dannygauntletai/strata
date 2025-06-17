@@ -25,9 +25,11 @@ import {
   XCircleIcon,
   ClockIcon,
   UsersIcon,
-  PlusIcon
+  PlusIcon,
+  PaperAirplaneIcon,
+  XMarkIcon
 } from '@heroicons/react/16/solid'
-import { Dialog, DialogPanel } from '@headlessui/react'
+import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { getCurrentUser } from '@/lib/auth'
 import { getCoachApiUrl } from '@/lib/ssm-config'
@@ -48,6 +50,24 @@ interface RSVP {
   additional_notes?: string
   created_at: string
   updated_at: string
+}
+
+interface EventInvitation {
+  invitation_id: string
+  event_id: string
+  invitee_email: string
+  invitee_name?: string
+  status: 'pending' | 'sent' | 'accepted' | 'declined'
+  sent_at?: string
+  responded_at?: string
+  created_at: string
+  message?: string
+}
+
+interface InvitationForm {
+  invitee_email: string
+  invitee_name: string
+  message: string
 }
 
 interface Event {
@@ -101,6 +121,17 @@ export default function EventView({ params }: { params: { id: string } }) {
   const [showRSVPs, setShowRSVPs] = useState(false)
   const [publishingToEventbrite, setPublishingToEventbrite] = useState(false)
   const [syncingAttendees, setSyncingAttendees] = useState(false)
+  
+  // Event invitations state
+  const [invitations, setInvitations] = useState<EventInvitation[]>([])
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [invitationForm, setInvitationForm] = useState<InvitationForm>({
+    invitee_email: '',
+    invitee_name: '',
+    message: ''
+  })
+  const [sendingInvitation, setSendingInvitation] = useState(false)
+  
   const router = useRouter()
 
   const fetchEvent = useCallback(async () => {
@@ -141,8 +172,22 @@ export default function EventView({ params }: { params: { id: string } }) {
       }
     }
 
+    const fetchInvitations = async () => {
+      try {
+        const apiUrl = await getCoachApiUrl()
+        const response = await fetch(`${apiUrl}/invitations?event_id=${params.id}`)
+        if (response.ok) {
+          const data = await response.json()
+          setInvitations(data.invitations || [])
+        }
+      } catch (error) {
+        console.error('Error fetching invitations:', error)
+      }
+    }
+
     if (params.id) {
       fetchRSVPs()
+      fetchInvitations()
     }
   }, [params.id])
 
@@ -295,6 +340,58 @@ export default function EventView({ params }: { params: { id: string } }) {
       alert('Failed to sync attendees')
     } finally {
       setSyncingAttendees(false)
+    }
+  }
+
+  const handleSendInvitation = async () => {
+    if (!event) return
+    
+    try {
+      setSendingInvitation(true)
+      const user = getCurrentUser()
+      
+      const invitationData = {
+        event_id: event.event_id,
+        invitee_email: invitationForm.invitee_email,
+        invitee_name: invitationForm.invitee_name,
+        inviter_id: user?.email || 'unknown',
+        message: invitationForm.message,
+        send_immediately: true
+      }
+
+      const apiUrl = await getCoachApiUrl()
+      const response = await fetch(`${apiUrl}/invitations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(invitationData),
+      })
+
+      if (response.ok) {
+        alert('Event invitation sent successfully!')
+        setShowInviteModal(false)
+        setInvitationForm({
+          invitee_email: '',
+          invitee_name: '',
+          message: ''
+        })
+        
+        // Refresh invitations list
+        const refreshResponse = await fetch(`${apiUrl}/invitations?event_id=${params.id}`)
+        if (refreshResponse.ok) {
+          const data = await refreshResponse.json()
+          setInvitations(data.invitations || [])
+        }
+      } else {
+        const errorData = await response.json()
+        alert(`Failed to send invitation: ${errorData.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Error sending invitation:', error)
+      alert('Failed to send invitation')
+    } finally {
+      setSendingInvitation(false)
     }
   }
 
@@ -471,6 +568,15 @@ export default function EventView({ params }: { params: { id: string } }) {
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-3">
+          <Button 
+            outline 
+            onClick={() => setShowInviteModal(true)}
+            className="flex items-center gap-2"
+          >
+            <PaperAirplaneIcon className="w-4 h-4" />
+            Invite Participants
+          </Button>
+          
           <Button 
             outline 
             onClick={() => router.push(`/coach/events/${event.event_id}/edit`)}
@@ -862,6 +968,104 @@ export default function EventView({ params }: { params: { id: string } }) {
           </>
         )}
       </div>
+
+      {/* Event Invitation Modal */}
+      <Dialog open={showInviteModal} onClose={() => setShowInviteModal(false)} className="relative z-50">
+        <div className="fixed inset-0 bg-black/25" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <DialogPanel className="mx-auto max-w-md rounded-xl bg-white p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <DialogTitle as="h3" className="text-lg font-semibold text-gray-900">
+                Invite Participants to Event
+              </DialogTitle>
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Event:</strong> {event?.title}
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                {event && formatDate(event.start_date)} at {event && formatTime(event.start_date)}
+              </p>
+            </div>
+            
+            <form onSubmit={(e) => { e.preventDefault(); handleSendInvitation(); }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Participant Email *
+                </label>
+                <Input
+                  type="email"
+                  required
+                  value={invitationForm.invitee_email}
+                  onChange={(e) => setInvitationForm(prev => ({ ...prev, invitee_email: e.target.value }))}
+                  placeholder="participant@example.com"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Participant Name
+                </label>
+                <Input
+                  type="text"
+                  value={invitationForm.invitee_name}
+                  onChange={(e) => setInvitationForm(prev => ({ ...prev, invitee_name: e.target.value }))}
+                  placeholder="John Smith"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Personal Message (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={invitationForm.message}
+                  onChange={(e) => setInvitationForm(prev => ({ ...prev, message: e.target.value }))}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#004aad] focus:outline-none focus:ring-1 focus:ring-[#004aad]"
+                  placeholder="I'd love to have you join us for this event..."
+                />
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                <Button 
+                  type="submit" 
+                  className="flex-1 bg-[#004aad] text-white hover:bg-[#003888]"
+                  disabled={sendingInvitation}
+                >
+                  {sendingInvitation ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <PaperAirplaneIcon className="w-4 h-4 mr-2" />
+                      Send Invitation
+                    </>
+                  )}
+                </Button>
+                <Button 
+                  type="button" 
+                  outline 
+                  onClick={() => setShowInviteModal(false)} 
+                  className="flex-1"
+                  disabled={sendingInvitation}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </DialogPanel>
+        </div>
+      </Dialog>
 
       {/* Delete confirmation dialog */}
       <Dialog open={showDeleteDialog} onClose={() => setShowDeleteDialog(false)} className="relative z-50">

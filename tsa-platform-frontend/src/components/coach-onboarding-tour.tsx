@@ -71,7 +71,7 @@ export function CoachOnboardingTour({ run, onComplete, forceRestart = false }: C
       if (!coachApiUrl) return null
 
       const authHeaders = getAuthHeader()
-      const response = await fetch(`${coachApiUrl}/profile?email=${encodeURIComponent(email)}`, {
+      const response = await fetch(`${coachApiUrl}/profile`, {
         method: 'GET',
         headers: {
           ...authHeaders,
@@ -104,7 +104,6 @@ export function CoachOnboardingTour({ run, onComplete, forceRestart = false }: C
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          email: email,
           dashboard_tour_completed: completed,
           dashboard_tour_completed_at: completed ? new Date().toISOString() : null
         })
@@ -225,11 +224,11 @@ export function CoachOnboardingTour({ run, onComplete, forceRestart = false }: C
       placement: 'right',
     },
     {
-      target: '[data-tour="photos-section"]',
+      target: '[data-tour="media-section"]',
       content: (
         <div>
-          <h3 className="text-lg font-semibold mb-2">Photo Management</h3>
-          <p>Upload, organize, and share photos from school events, activities, and student achievements.</p>
+          <h3 className="text-lg font-semibold mb-2">Media Management</h3>
+          <p>Upload, organize, and share photos and videos from school events, activities, and student achievements.</p>
         </div>
       ),
       placement: 'right',

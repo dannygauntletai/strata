@@ -1,0 +1,471 @@
+{
+ "Description": "Security and authentication for TSA Unified Platform (dev)",
+ "Resources": {
+  "UnifiedPlatformUserPool95250878": {
+   "Type": "AWS::Cognito::UserPool",
+   "Properties": {
+    "AccountRecoverySetting": {
+     "RecoveryMechanisms": [
+      {
+       "Name": "verified_email",
+       "Priority": 1
+      }
+     ]
+    },
+    "AdminCreateUserConfig": {
+     "AllowAdminCreateUserOnly": true
+    },
+    "AutoVerifiedAttributes": [
+     "email"
+    ],
+    "EmailVerificationMessage": "The verification code to your new account is {####}",
+    "EmailVerificationSubject": "Verify your new account",
+    "Policies": {
+     "PasswordPolicy": {
+      "MinimumLength": 8,
+      "RequireLowercase": true,
+      "RequireNumbers": true,
+      "RequireSymbols": true,
+      "RequireUppercase": true
+     }
+    },
+    "Schema": [
+     {
+      "Mutable": false,
+      "Name": "email",
+      "Required": true
+     },
+     {
+      "Mutable": true,
+      "Name": "family_name",
+      "Required": true
+     },
+     {
+      "Mutable": true,
+      "Name": "given_name",
+      "Required": true
+     },
+     {
+      "AttributeDataType": "String",
+      "Mutable": true,
+      "Name": "user_role"
+     },
+     {
+      "AttributeDataType": "String",
+      "Mutable": true,
+      "Name": "coach_level"
+     },
+     {
+      "AttributeDataType": "String",
+      "Mutable": true,
+      "Name": "specialization"
+     }
+    ],
+    "SmsVerificationMessage": "The verification code to your new account is {####}",
+    "UserPoolName": "tsa-unified-platform-dev",
+    "UserPoolTags": {
+     "CostCenter": "Engineering",
+     "Environment": "dev",
+     "Layer": "Infrastructure",
+     "ManagedBy": "CDK",
+     "Owner": "TSA-Engineering",
+     "Project": "TSA-Unified-Platform"
+    },
+    "UsernameAttributes": [
+     "email"
+    ],
+    "VerificationMessageTemplate": {
+     "DefaultEmailOption": "CONFIRM_WITH_CODE",
+     "EmailMessage": "The verification code to your new account is {####}",
+     "EmailSubject": "Verify your new account",
+     "SmsMessage": "The verification code to your new account is {####}"
+    }
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-security-dev/UnifiedPlatformUserPool/Resource"
+   }
+  },
+  "UnifiedPlatformUserPoolUnifiedPlatformClient1DE78D1A": {
+   "Type": "AWS::Cognito::UserPoolClient",
+   "Properties": {
+    "AccessTokenValidity": 60,
+    "AllowedOAuthFlows": [
+     "implicit",
+     "code"
+    ],
+    "AllowedOAuthFlowsUserPoolClient": true,
+    "AllowedOAuthScopes": [
+     "profile",
+     "phone",
+     "email",
+     "openid",
+     "aws.cognito.signin.user.admin"
+    ],
+    "CallbackURLs": [
+     "https://example.com"
+    ],
+    "ClientName": "tsa-unified-platform-client-dev",
+    "ExplicitAuthFlows": [
+     "ALLOW_USER_PASSWORD_AUTH",
+     "ALLOW_ADMIN_USER_PASSWORD_AUTH",
+     "ALLOW_USER_SRP_AUTH",
+     "ALLOW_REFRESH_TOKEN_AUTH"
+    ],
+    "GenerateSecret": false,
+    "IdTokenValidity": 60,
+    "RefreshTokenValidity": 43200,
+    "SupportedIdentityProviders": [
+     "COGNITO"
+    ],
+    "TokenValidityUnits": {
+     "AccessToken": "minutes",
+     "IdToken": "minutes",
+     "RefreshToken": "minutes"
+    },
+    "UserPoolId": {
+     "Ref": "UnifiedPlatformUserPool95250878"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-security-dev/UnifiedPlatformUserPool/UnifiedPlatformClient/Resource"
+   }
+  },
+  "UnifiedPlatformLambdaRoleD2558092": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "lambda.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+       ]
+      ]
+     },
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+       ]
+      ]
+     }
+    ],
+    "RoleName": "tsa-unified-platform-lambda-role-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-security-dev/UnifiedPlatformLambdaRole/Resource"
+   }
+  },
+  "UnifiedPlatformLambdaRoleDefaultPolicyEC71754B": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "dynamodb:DeleteItem",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:UpdateItem"
+       ],
+       "Effect": "Allow",
+       "Resource": "arn:aws:dynamodb:*:*:table/tsa-*"
+      },
+      {
+       "Action": "secretsmanager:GetSecretValue",
+       "Effect": "Allow",
+       "Resource": "arn:aws:secretsmanager:*:*:secret:tsa/*"
+      },
+      {
+       "Action": [
+        "ses:SendEmail",
+        "ses:SendRawEmail"
+       ],
+       "Effect": "Allow",
+       "Resource": "*"
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "UnifiedPlatformLambdaRoleDefaultPolicyEC71754B",
+    "Roles": [
+     {
+      "Ref": "UnifiedPlatformLambdaRoleD2558092"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-security-dev/UnifiedPlatformLambdaRole/DefaultPolicy/Resource"
+   }
+  },
+  "UnifiedPlatformLambdaSGE96E9657": {
+   "Type": "AWS::EC2::SecurityGroup",
+   "Properties": {
+    "GroupDescription": "Security group for unified platform Lambda functions",
+    "SecurityGroupEgress": [
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow all outbound traffic by default",
+      "IpProtocol": "-1"
+     }
+    ],
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ],
+    "VpcId": {
+     "Fn::ImportValue": "tsa-infra-networking-dev:ExportsOutputRefTsaUnifiedPlatformVPCB59A8695D3D43A55"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-security-dev/UnifiedPlatformLambdaSG/Resource"
+   }
+  },
+  "UnifiedPlatformDatabaseSG3143326C": {
+   "Type": "AWS::EC2::SecurityGroup",
+   "Properties": {
+    "GroupDescription": "Security group for unified platform PostgreSQL database",
+    "SecurityGroupEgress": [
+     {
+      "CidrIp": "255.255.255.255/32",
+      "Description": "Disallow all traffic",
+      "FromPort": 252,
+      "IpProtocol": "icmp",
+      "ToPort": 86
+     }
+    ],
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ],
+    "VpcId": {
+     "Fn::ImportValue": "tsa-infra-networking-dev:ExportsOutputRefTsaUnifiedPlatformVPCB59A8695D3D43A55"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-security-dev/UnifiedPlatformDatabaseSG/Resource"
+   }
+  },
+  "UnifiedPlatformDatabaseSGfromtsainfrasecuritydevUnifiedPlatformLambdaSG6341B6CA543263C0A4C4": {
+   "Type": "AWS::EC2::SecurityGroupIngress",
+   "Properties": {
+    "Description": "Allow unified platform Lambda functions to connect to PostgreSQL",
+    "FromPort": 5432,
+    "GroupId": {
+     "Fn::GetAtt": [
+      "UnifiedPlatformDatabaseSG3143326C",
+      "GroupId"
+     ]
+    },
+    "IpProtocol": "tcp",
+    "SourceSecurityGroupId": {
+     "Fn::GetAtt": [
+      "UnifiedPlatformLambdaSGE96E9657",
+      "GroupId"
+     ]
+    },
+    "ToPort": 5432
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-security-dev/UnifiedPlatformDatabaseSG/from tsainfrasecuritydevUnifiedPlatformLambdaSG6341B6CA:5432"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/32Nuw6CQBBFv4V+GQELP4DCWEkw1gbXEUeWHbKPGLLZf5dHNFZW93GKU0CRZZAnzcum8taliq4QTq6RnZiuS5DcanIM4WzRVMxKlHf97Z9SKkLtftH6REFND6FmhTNcsmJFcpzn2qJAWUxOlN6QG/eG/TDT/8dBtwatjVHUaNkbuQiO3g1+slaje7DebCHPYZc8LVFqvHbUI9RrvgFH5gOC+AAAAA=="
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-security-dev/CDKMetadata/Default"
+   }
+  }
+ },
+ "Outputs": {
+  "UserPoolId": {
+   "Description": "Cognito User Pool ID for unified platform authentication",
+   "Value": {
+    "Ref": "UnifiedPlatformUserPool95250878"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformUserPoolId-dev"
+   }
+  },
+  "UserPoolClientId": {
+   "Description": "Cognito User Pool Client ID for frontend",
+   "Value": {
+    "Ref": "UnifiedPlatformUserPoolUnifiedPlatformClient1DE78D1A"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformUserPoolClientId-dev"
+   }
+  },
+  "LambdaRoleArn": {
+   "Description": "Lambda execution role ARN",
+   "Value": {
+    "Fn::GetAtt": [
+     "UnifiedPlatformLambdaRoleD2558092",
+     "Arn"
+    ]
+   },
+   "Export": {
+    "Name": "UnifiedPlatformLambdaRoleArn-dev"
+   }
+  },
+  "ExportsOutputFnGetAttUnifiedPlatformUserPool95250878ArnF8378A1E": {
+   "Value": {
+    "Fn::GetAtt": [
+     "UnifiedPlatformUserPool95250878",
+     "Arn"
+    ]
+   },
+   "Export": {
+    "Name": "tsa-infra-security-dev:ExportsOutputFnGetAttUnifiedPlatformUserPool95250878ArnF8378A1E"
+   }
+  },
+  "ExportsOutputRefUnifiedPlatformUserPool95250878BAE19627": {
+   "Value": {
+    "Ref": "UnifiedPlatformUserPool95250878"
+   },
+   "Export": {
+    "Name": "tsa-infra-security-dev:ExportsOutputRefUnifiedPlatformUserPool95250878BAE19627"
+   }
+  },
+  "ExportsOutputRefUnifiedPlatformUserPoolUnifiedPlatformClient1DE78D1A2D28A108": {
+   "Value": {
+    "Ref": "UnifiedPlatformUserPoolUnifiedPlatformClient1DE78D1A"
+   },
+   "Export": {
+    "Name": "tsa-infra-security-dev:ExportsOutputRefUnifiedPlatformUserPoolUnifiedPlatformClient1DE78D1A2D28A108"
+   }
+  }
+ },
+ "Parameters": {
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}

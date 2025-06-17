@@ -1,0 +1,126 @@
+{
+  "version": "44.0.0",
+  "files": {
+    "4ab9b8f4b609652208864351c4003563b8d8954ebb51f21735378cb22b1f6ab0": {
+      "displayName": "CoachPortalService/CoachSharedLayer/Code",
+      "source": {
+        "path": "asset.4ab9b8f4b609652208864351c4003563b8d8954ebb51f21735378cb22b1f6ab0",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "4ab9b8f4b609652208864351c4003563b8d8954ebb51f21735378cb22b1f6ab0.zip",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    },
+    "3f7bf3dd497f6547b7216da8789b5912cdf928ef69be075566164ccc81beee3b": {
+      "displayName": "CoachPortalService/OnboardingHandler/Code",
+      "source": {
+        "path": "asset.3f7bf3dd497f6547b7216da8789b5912cdf928ef69be075566164ccc81beee3b",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "3f7bf3dd497f6547b7216da8789b5912cdf928ef69be075566164ccc81beee3b.zip",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    },
+    "b3316b713fe44936919f3963eb7bd8f674917be33722cf892520f66c5ec38326": {
+      "displayName": "CoachPortalService/ProfileHandler/Code",
+      "source": {
+        "path": "asset.b3316b713fe44936919f3963eb7bd8f674917be33722cf892520f66c5ec38326",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "b3316b713fe44936919f3963eb7bd8f674917be33722cf892520f66c5ec38326.zip",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    },
+    "b273c062932c542ce738e9222dfb947bf6a7849beb3657f64682f50b476bbe14": {
+      "displayName": "CoachPortalService/EventsHandler/Code",
+      "source": {
+        "path": "asset.b273c062932c542ce738e9222dfb947bf6a7849beb3657f64682f50b476bbe14",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "b273c062932c542ce738e9222dfb947bf6a7849beb3657f64682f50b476bbe14.zip",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    },
+    "9f2a7bcef140ea1c0941d8190687d09b83a36c48da2ca9125dae0056ef0d7d11": {
+      "displayName": "CoachPortalService/BackgroundHandler/Code",
+      "source": {
+        "path": "asset.9f2a7bcef140ea1c0941d8190687d09b83a36c48da2ca9125dae0056ef0d7d11",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "9f2a7bcef140ea1c0941d8190687d09b83a36c48da2ca9125dae0056ef0d7d11.zip",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    },
+    "9edf936eab4099c24ff73c53e0ffb5763c273de09044fc06d8b109b96c6d0633": {
+      "displayName": "CoachPortalService/EventbriteOAuthHandler/Code",
+      "source": {
+        "path": "asset.9edf936eab4099c24ff73c53e0ffb5763c273de09044fc06d8b109b96c6d0633",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "9edf936eab4099c24ff73c53e0ffb5763c273de09044fc06d8b109b96c6d0633.zip",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    },
+    "5c0f0f42c87eda099389250bfd74c30621e197ae57fc34bedf74472b21dfd676": {
+      "displayName": "CoachPortalService/InvitationsHandler/Code",
+      "source": {
+        "path": "asset.5c0f0f42c87eda099389250bfd74c30621e197ae57fc34bedf74472b21dfd676",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "5c0f0f42c87eda099389250bfd74c30621e197ae57fc34bedf74472b21dfd676.zip",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    },
+    "c5623b79024f7015aba2f33124c155eb27b1fba2991a131473d9c68fa7057293": {
+      "displayName": "tsa-coach-backend-dev Template",
+      "source": {
+        "path": "tsa-coach-backend-dev.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "c5623b79024f7015aba2f33124c155eb27b1fba2991a131473d9c68fa7057293.json",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

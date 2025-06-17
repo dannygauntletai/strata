@@ -223,13 +223,45 @@ class DataStack(Stack):
         )
         
         # ========================================
-        # INVITATION AND ENROLLMENT TABLES
+        # INVITATION TABLES (Clear Separation by Type)
         # ========================================
         
-        # Invitations table - Coach invitations
-        self.invitations_table = dynamodb.Table(
-            self, "InvitationsTable",
-            table_name=self.table_config.get_table_name("invitations"),
+        # Coach invitations table - Admin invites coaches to join platform
+        self.coach_invitations_table = dynamodb.Table(
+            self, "CoachInvitationsTable",
+            table_name=self.table_config.get_table_name("coach-invitations"),
+            partition_key=dynamodb.Attribute(
+                name="invitation_id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            point_in_time_recovery=True if self.stage == "prod" else False,
+            time_to_live_attribute="expires_at",
+            removal_policy=RemovalPolicy.DESTROY
+        )
+        
+        # Add GSI for email lookups
+        self.coach_invitations_table.add_global_secondary_index(
+            index_name="email-index",
+            partition_key=dynamodb.Attribute(
+                name="email",
+                type=dynamodb.AttributeType.STRING
+            )
+        )
+        
+        # Add GSI for status-based queries
+        self.coach_invitations_table.add_global_secondary_index(
+            index_name="status-index",
+            partition_key=dynamodb.Attribute(
+                name="status",
+                type=dynamodb.AttributeType.STRING
+            )
+        )
+        
+        # Parent invitations table - Coach invites parents to join platform
+        self.parent_invitations_table = dynamodb.Table(
+            self, "ParentInvitationsTable",
+            table_name=self.table_config.get_table_name("parent-invitations"),
             partition_key=dynamodb.Attribute(
                 name="invitation_id",
                 type=dynamodb.AttributeType.STRING
@@ -239,14 +271,40 @@ class DataStack(Stack):
             removal_policy=RemovalPolicy.DESTROY
         )
         
-        # Add GSI for email lookups
-        self.invitations_table.add_global_secondary_index(
-            index_name="email-index",
+        # Add GSI for parent email lookups
+        self.parent_invitations_table.add_global_secondary_index(
+            index_name="parent-email-index",
             partition_key=dynamodb.Attribute(
-                name="email",
+                name="parent_email",
                 type=dynamodb.AttributeType.STRING
             )
         )
+        
+        # Event invitations table - Coach invites parents to specific events
+        self.event_invitations_table = dynamodb.Table(
+            self, "EventInvitationsTable",
+            table_name=self.table_config.get_table_name("event-invitations"),
+            partition_key=dynamodb.Attribute(
+                name="invitation_id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            time_to_live_attribute="expires_at",
+            removal_policy=RemovalPolicy.DESTROY
+        )
+        
+        # Add GSI for event-based lookups
+        self.event_invitations_table.add_global_secondary_index(
+            index_name="event-id-index",
+            partition_key=dynamodb.Attribute(
+                name="event_id",
+                type=dynamodb.AttributeType.STRING
+            )
+        )
+        
+        # ========================================
+        # ENROLLMENT TABLES
+        # ========================================
         
         # Enrollments table - Parent enrollments
         self.enrollments_table = dynamodb.Table(
@@ -452,10 +510,24 @@ class DataStack(Stack):
         )
         
         CfnOutput(
-            self, "InvitationsTableName",
-            value=self.invitations_table.table_name,
-            description="Invitations table name",
-            export_name=f"UnifiedPlatformInvitationsTable-{self.stage}"
+            self, "CoachInvitationsTableName",
+            value=self.coach_invitations_table.table_name,
+            description="Coach invitations table name",
+            export_name=f"UnifiedPlatformCoachInvitationsTable-{self.stage}"
+        )
+        
+        CfnOutput(
+            self, "ParentInvitationsTableName",
+            value=self.parent_invitations_table.table_name,
+            description="Parent invitations table name",
+            export_name=f"UnifiedPlatformParentInvitationsTable-{self.stage}"
+        )
+        
+        CfnOutput(
+            self, "EventInvitationsTableName",
+            value=self.event_invitations_table.table_name,
+            description="Event invitations table name",
+            export_name=f"UnifiedPlatformEventInvitationsTable-{self.stage}"
         )
         
         CfnOutput(

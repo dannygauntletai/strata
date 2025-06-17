@@ -137,27 +137,40 @@ function EventsContent() {
   // Google Calendar integration state
   const [creatingGoogleEvents, setCreatingGoogleEvents] = useState<Record<string, boolean>>({})
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false)
+  const [googleCalendarEmail, setGoogleCalendarEmail] = useState<string | null>(null)
+  const [calendarLoading, setCalendarLoading] = useState(false)
   
   // Eventbrite integration state
   const [eventbriteConnected, setEventbriteConnected] = useState(false)
   const [eventbriteLoading, setEventbriteLoading] = useState(true)
+  const [eventbriteOrganization, setEventbriteOrganization] = useState<string | null>(null)
+  const [eventbriteConnecting, setEventbriteConnecting] = useState(false)
 
   // Check Google Calendar connection status
   useEffect(() => {
     const checkGoogleCalendarStatus = async () => {
       try {
+        setCalendarLoading(true)
         const user = getCurrentUser()
-        if (!user?.email) return
+        if (!user) return
 
-        const apiUrl = getCoachApiUrl()
-        const response = await fetch(`${apiUrl}/coach/google-calendar/status?coach_email=${encodeURIComponent(user.email)}`)
+        const apiUrl = await getCoachApiUrl()
+        const response = await fetch(`${apiUrl}/coach/google-calendar/status`, {
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': user.token ? `Bearer ${user.token}` : ''
+          }
+        })
         
         if (response.ok) {
           const data = await response.json()
-          setGoogleCalendarConnected(data.connected)
+          setGoogleCalendarConnected(data.connected || false)
+          setGoogleCalendarEmail(data.email || null)
         }
       } catch (error) {
         console.error('Error checking Google Calendar status:', error)
+      } finally {
+        setCalendarLoading(false)
       }
     }
     checkGoogleCalendarStatus()
@@ -167,15 +180,22 @@ function EventsContent() {
   useEffect(() => {
     const checkEventbriteStatus = async () => {
       try {
+        setEventbriteLoading(true)
         const user = getCurrentUser()
-        if (!user?.email) return
+        if (!user) return
 
-        const apiUrl = getCoachApiUrl()
-        const response = await fetch(`${apiUrl}/eventbrite/oauth/status?coach_id=${encodeURIComponent(user.email)}`)
+        const apiUrl = await getCoachApiUrl()
+        const response = await fetch(`${apiUrl}/eventbrite/oauth/status`, {
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': user.token ? `Bearer ${user.token}` : ''
+          }
+        })
         
         if (response.ok) {
           const data = await response.json()
-          setEventbriteConnected(data.connected)
+          setEventbriteConnected(data.oauth_status?.connected || false)
+          setEventbriteOrganization(data.oauth_status?.organization_id || null)
         }
       } catch (error) {
         console.error('Error checking Eventbrite status:', error)
@@ -229,28 +249,29 @@ function EventsContent() {
   }
 
   // Connect to Eventbrite
-  const handleConnectEventbrite = async () => {
+  const handleEventbriteConnect = async () => {
     try {
+      setEventbriteConnecting(true)
       const user = getCurrentUser()
-      if (!user?.email) {
-        alert('Please log in to connect Eventbrite')
-        return
-      }
+      if (!user) return
 
-      const apiUrl = getCoachApiUrl()
-      const response = await fetch(`${apiUrl}/eventbrite/oauth/authorize?coach_id=${encodeURIComponent(user.email)}`)
+      const apiUrl = await getCoachApiUrl()
+      const response = await fetch(`${apiUrl}/eventbrite/oauth/authorize`, {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
       
       if (response.ok) {
         const data = await response.json()
+        // Redirect to Eventbrite OAuth
         window.location.href = data.authorization_url
-      } else {
-        const errorText = await response.text()
-        console.error('Eventbrite OAuth error:', errorText)
-        alert('Failed to initiate Eventbrite connection')
       }
     } catch (error) {
-      console.error('Error connecting to Eventbrite:', error)
-      alert('Failed to connect to Eventbrite')
+      console.error('Error initiating Eventbrite connection:', error)
+    } finally {
+      setEventbriteConnecting(false)
     }
   }
 
@@ -258,67 +279,48 @@ function EventsContent() {
     return generateCalendarDays(currentDate.getFullYear(), currentDate.getMonth(), events)
   }, [currentDate, events])
 
-  useEffect(() => {
-    const loadEvents = async () => {
-      try {
-        setLoading(true)
-        const user = getCurrentUser()
-        if (!user?.email) {
-          console.error('No user email available')
-          return
-        }
-
-        // Call Lambda API with coach filtering
-        const apiUrl = getCoachApiUrl()
-        const response = await fetch(`${apiUrl}/events?created_by=${encodeURIComponent(user.email)}`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch events')
-        }
-        const data = await response.json()
-        setEvents(data.events || [])
-      } catch (error) {
-        console.error('Failed to load events:', error)
-        // Fallback to mock data if API fails
-        const eventData = await getEvents()
-        setEvents(eventData)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadEvents()
-  }, [])
-
-  // Function to refresh events data
-  const refreshEvents = async () => {
+  const loadEvents = async () => {
     try {
       const user = getCurrentUser()
-      if (!user?.email) return
+      if (!user) {
+        setLoading(false)
+        return
+      }
 
-      const apiUrl = getCoachApiUrl()
-      const response = await fetch(`${apiUrl}/events?created_by=${encodeURIComponent(user.email)}`)
-      if (!response.ok) return
-
-      const data = await response.json()
-      setEvents(data.events || [])
+      const apiUrl = await getCoachApiUrl()
+      const response = await fetch(`${apiUrl}/events`, {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setEvents(data.events || [])
+      }
     } catch (error) {
-      console.error('Failed to refresh events:', error)
+      console.error('Error loading events:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  // Set up periodic refresh to keep participant counts current
+  // Load events on component mount and set up periodic refresh
   useEffect(() => {
-    const refreshInterval = setInterval(refreshEvents, 30000) // Refresh every 30 seconds
+    loadEvents() // Initial load
+    const refreshInterval = setInterval(loadEvents, 30000) // Refresh every 30 seconds
 
     // Listen for focus events to refresh when user returns to tab
     const handleFocus = () => {
-      refreshEvents()
+      loadEvents()
     }
     
     window.addEventListener('focus', handleFocus)
 
     // Listen for custom events from individual event pages
     const handleEventUpdate = () => {
-      refreshEvents()
+      loadEvents()
     }
     
     window.addEventListener('eventUpdated', handleEventUpdate)
@@ -374,7 +376,7 @@ function EventsContent() {
     
     try {
       setDeleteLoading(true)
-      const apiUrl = getCoachApiUrl()
+      const apiUrl = await getCoachApiUrl()
       const response = await fetch(`${apiUrl}/events/${eventToDelete.event_id}`, {
         method: 'DELETE'
       })
@@ -497,7 +499,7 @@ function EventsContent() {
                 </div>
                 <Button 
                   outline
-                  onClick={handleConnectEventbrite}
+                  onClick={handleEventbriteConnect}
                   className="border-orange-300 text-orange-700 hover:bg-orange-100"
                 >
                   Connect Now

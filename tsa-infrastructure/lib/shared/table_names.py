@@ -37,10 +37,13 @@ class TableNameConfig:
             "profiles": self.get_table_name("profiles"), 
             "organizations": self.get_table_name("organizations"),
             
-            # ===== INVITATION & ENROLLMENT TABLES =====
-            "invitations": self.get_table_name("invitations"),
+            # ===== INVITATION TABLES (Clear Separation by Type) =====
+            "coach-invitations": self.get_table_name("coach-invitations"),  # Admin → Coach (join platform)
+            "parent-invitations": self.get_table_name("parent-invitations"),  # Coach → Parent (join platform)
+            "event-invitations": self.get_table_name("event-invitations"),  # Coach → Parent (attend events)
+            
+            # ===== ENROLLMENT TABLES =====
             "enrollments": self.get_table_name("enrollments"),
-            "parent-invitations": self.get_table_name("parent-invitations"),
             
             # ===== EVENT TABLES =====
             "events": self.get_table_name("events"),
@@ -239,7 +242,9 @@ class TableNameConfig:
             "USERS_TABLE": self.get_table_name("users"),
             "PROFILES_TABLE": self.get_table_name("profiles"),
             "ORGANIZATIONS_TABLE": self.get_table_name("organizations"),
-            "INVITATIONS_TABLE": self.get_table_name("invitations"),
+            "COACH_INVITATIONS_TABLE": self.get_table_name("coach-invitations"),
+            "PARENT_INVITATIONS_TABLE": self.get_table_name("parent-invitations"),
+            "EVENT_INVITATIONS_TABLE": self.get_table_name("event-invitations"),
             "ENROLLMENTS_TABLE": self.get_table_name("enrollments"),
             "EVENTS_TABLE": self.get_table_name("events"),
             "DOCUMENTS_TABLE": self.get_table_name("documents"),
@@ -252,7 +257,7 @@ class TableNameConfig:
             service_vars.update({
                 "TSA_USERS_TABLE": self.get_table_name("users"),
                 "TSA_PROFILES_TABLE": self.get_table_name("profiles"),
-                "TSA_INVITATIONS_TABLE": self.get_table_name("invitations"),
+                "TSA_INVITATIONS_TABLE": self.get_table_name("coach-invitations"),  # Admin manages coach invitations
                 "TSA_ENROLLMENTS_TABLE": self.get_table_name("enrollments"),
                 "TSA_EVENTS_TABLE": self.get_table_name("events"),
                 "TSA_DOCUMENTS_TABLE": self.get_table_name("documents"),
@@ -265,6 +270,7 @@ class TableNameConfig:
                 "LEGAL_REQUIREMENTS_TABLE": self.get_table_name("legal-requirements"),
                 "EVENTBRITE_CONFIG_TABLE": self.get_table_name("eventbrite-config"),
                 "EVENT_ATTENDEES_TABLE": self.get_table_name("event-attendees"),
+                "INVITATIONS_TABLE": self.get_table_name("coach-invitations"),  # Legacy env var for coach invitations
             })
         elif service == "parent":
             service_vars.update({
@@ -351,7 +357,9 @@ def get_table_env_vars(stage: str) -> Dict[str, str]:
         "STUDENT_SCHOOL_ASSOCIATIONS_TABLE": config.get_table_name("student-school-associations"),
         
         # TSA Business Tables
-        "INVITATIONS_TABLE": config.get_table_name("invitations"),
+        "COACH_INVITATIONS_TABLE": config.get_table_name("coach-invitations"),
+        "PARENT_INVITATIONS_TABLE": config.get_table_name("parent-invitations"),
+        "EVENT_INVITATIONS_TABLE": config.get_table_name("event-invitations"),
         "DOCUMENTS_TABLE": config.get_table_name("documents"),
         "EVENTS_TABLE": config.get_table_name("events"),
         "AUDIT_LOGS_TABLE": config.get_table_name("audit-logs"),

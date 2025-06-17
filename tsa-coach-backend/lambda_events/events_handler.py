@@ -5,7 +5,7 @@ Handles event management for coaches with Eventbrite integration
 import json
 import os
 import boto3
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -15,6 +15,7 @@ import sys
 sys.path.append('/opt/python')
 from tsa_shared.database import get_dynamodb_table, get_table_name, get_current_timestamp
 from shared_utils.dynamodb_models import Event, EventStatus, EventCategory, EventVisibility, TicketType
+from user_identifier import UserIdentifier
 from lambda_events.event_sync_service import EventSyncService
 from lambda_events.eventbrite_client import EventbriteAPIError
 
@@ -59,34 +60,110 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return create_cors_response(500, {'error': str(e)})
 
 def create_cors_response(status_code: int, body: dict) -> dict:
-    """Create standardized response with proper CORS headers"""
+    """Create a CORS-enabled response"""
     return {
         "statusCode": status_code,
         "headers": {
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD",
+            "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Requested-With,Accept,Accept-Language,Cache-Control",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600",
             "Content-Type": "application/json"
         },
         "body": json.dumps(body)
     }
 
+def extract_user_from_auth_token(event: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract user email from JWT auth token in Authorization header
+    Returns the authenticated user's email, or None if not authenticated
+    """
+    try:
+        headers = event.get('headers', {})
+        
+        # Get authorization header (case-insensitive)
+        auth_header = None
+        for header_name, header_value in headers.items():
+            if header_name.lower() == 'authorization':
+                auth_header = header_value
+                break
+        
+        if not auth_header:
+            print("⚠️ No Authorization header found")
+            return None
+        
+        if not auth_header.startswith('Bearer '):
+            print("⚠️ Invalid Authorization header format")
+            return None
+        
+        # Extract JWT token
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        
+        # Decode JWT payload (basic validation - assumes token is already validated by API Gateway)
+        import base64
+        import json
+        
+        # Split token into parts
+        token_parts = token.split('.')
+        if len(token_parts) != 3:
+            print("⚠️ Invalid JWT token format")
+            return None
+        
+        # Decode payload (second part)
+        payload_b64 = token_parts[1]
+        # Add padding if necessary
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += '=' * padding
+        
+        payload = json.loads(base64.b64decode(payload_b64))
+        
+        # Extract email from token payload
+        email = payload.get('email') or payload.get('username')
+        if email:
+            print(f"✅ Authenticated user extracted from token: {email}")
+            return email.lower().strip()
+        
+        print("⚠️ No email found in token payload")
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error extracting user from auth token: {str(e)}")
+        return None
+
 def get_events(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Get events for a coach"""
+    """Get events for authenticated coach only"""
     try:
         query_params = event.get('queryStringParameters') or {}
-        coach_id = query_params.get('coach_id') or query_params.get('created_by')
         
-        if not coach_id:
-            return create_cors_response(400, {'error': 'coach_id is required'})
+        # Check for special timeline status action (can use auth context)
+        action = query_params.get('action')
+        if action == 'timeline_status':
+            return get_timeline_status(event)
+        
+        # Extract authenticated user from token - NO EMAIL PARAMETERS!
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_cors_response(401, {'error': 'Authentication required'})
+        
+        print(f"🔐 Fetching events for authenticated user: {authenticated_email}")
+        
+        # Use centralized ID mapping to get coach profile_id
+        profiles_table = get_dynamodb_table(get_table_name('profiles'))
+        
+        try:
+            normalized_coach_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
+        except ValueError as e:
+            return create_cors_response(404, {'error': str(e)})
         
         events_table = get_dynamodb_table(get_table_name('events'))
         
-        # Query events by coach using GSI
+        # Query events by authenticated coach using GSI
         response = events_table.query(
             IndexName='coach-events-index',
             KeyConditionExpression='coach_id = :coach_id',
-            ExpressionAttributeValues={':coach_id': coach_id},
+            ExpressionAttributeValues={':coach_id': normalized_coach_id},
             ScanIndexForward=False  # Most recent first
         )
         
@@ -99,7 +176,7 @@ def get_events(event: Dict[str, Any]) -> Dict[str, Any]:
                 # Handle legacy events that might not have coach_id
                 event_data = event_item.copy()
                 if 'coach_id' not in event_data:
-                    event_data['coach_id'] = event_data.get('created_by', coach_id)
+                    event_data['coach_id'] = event_data.get('created_by', normalized_coach_id)
                 
                 event_obj = Event(**event_data)
                 transformed_event = transform_event_for_frontend(event_obj)
@@ -108,7 +185,7 @@ def get_events(event: Dict[str, Any]) -> Dict[str, Any]:
                 logger.warning(f"Error transforming event {event_item.get('event_id', 'unknown')}: {str(e)}")
                 continue
         
-        logger.info(f"Retrieved {len(transformed_events)} events for coach {coach_id}")
+        logger.info(f"Retrieved {len(transformed_events)} events for coach {normalized_coach_id}")
         
         return create_cors_response(200, {
             'events': transformed_events,
@@ -117,6 +194,89 @@ def get_events(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error getting events: {str(e)}")
+        return create_cors_response(500, {'error': str(e)})
+
+def get_timeline_status(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Get timeline status for authenticated coach"""
+    try:
+        # Extract authenticated user from token
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_cors_response(401, {'error': 'Authentication required'})
+        
+        print(f"🔐 Fetching timeline status for authenticated user: {authenticated_email}")
+        
+        # Use centralized ID mapping
+        profiles_table = get_dynamodb_table(get_table_name('profiles'))
+        
+        try:
+            normalized_coach_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
+        except ValueError as e:
+            return create_cors_response(404, {'error': str(e)})
+        
+        # Get coach profile for timeline status
+        response = profiles_table.get_item(Key={'profile_id': normalized_coach_id})
+        if 'Item' not in response:
+            return create_cors_response(404, {'error': 'Coach profile not found'})
+        
+        profile = response['Item']
+        
+        # Verify the profile belongs to the authenticated user (security check)
+        if profile.get('email', '').lower() != authenticated_email:
+            print(f"🚨 Security violation: Authenticated user {authenticated_email} tried to access profile {profile.get('email')}")
+            return create_cors_response(403, {'error': 'Access denied'})
+        
+        # Calculate timeline status based on profile completeness and activities
+        timeline_status = {
+            'profile_complete': bool(profile.get('first_name') and profile.get('last_name') and profile.get('school_name')),
+            'onboarding_complete': profile.get('onboarding_completed', False),
+            'events_created': 0,  # Will be calculated below
+            'invitations_sent': 0,  # Will be calculated below
+            'next_steps': []
+        }
+        
+        # Count events created by this coach
+        events_table = get_dynamodb_table(get_table_name('events'))
+        try:
+            events_response = events_table.query(
+                IndexName='coach-events-index',
+                KeyConditionExpression='coach_id = :coach_id',
+                ExpressionAttributeValues={':coach_id': normalized_coach_id},
+                Select='COUNT'
+            )
+            timeline_status['events_created'] = events_response.get('Count', 0)
+        except Exception as e:
+            logger.warning(f"Error counting events: {str(e)}")
+        
+        # Count invitations sent by this coach
+        try:
+                    invitations_table = get_dynamodb_table(get_table_name('parent-invitations'))
+        invitations_response = invitations_table.scan(
+                FilterExpression='coach_id = :coach_id',
+                ExpressionAttributeValues={':coach_id': normalized_coach_id},
+                Select='COUNT'
+            )
+            timeline_status['invitations_sent'] = invitations_response.get('Count', 0)
+        except Exception as e:
+            logger.warning(f"Error counting invitations: {str(e)}")
+        
+        # Generate next steps based on current status
+        if not timeline_status['profile_complete']:
+            timeline_status['next_steps'].append('Complete your profile information')
+        
+        if timeline_status['events_created'] == 0:
+            timeline_status['next_steps'].append('Create your first event')
+        
+        if timeline_status['invitations_sent'] == 0:
+            timeline_status['next_steps'].append('Send your first parent invitation')
+        
+        return create_cors_response(200, {
+            'timeline_status': timeline_status,
+            'coach_id': normalized_coach_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting timeline status: {str(e)}")
         return create_cors_response(500, {'error': str(e)})
 
 def get_event_by_id(event: Dict[str, Any]) -> Dict[str, Any]:

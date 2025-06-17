@@ -281,7 +281,12 @@ export default function TimebackLearning() {
         return
       }
 
-      const response = await fetch(`${apiBaseUrl}/bootcamp/progress?coach_id=${user.email}`)
+      const response = await fetch(`${apiBaseUrl}/bootcamp/progress`, {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
       if (response.ok) {
         const data = await response.json()
         setCompletedTests(data.completed_tests || [])

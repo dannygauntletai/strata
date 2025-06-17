@@ -5,7 +5,7 @@ Handles OAuth flow for connecting coach Eventbrite accounts
 import json
 import os
 import boto3
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import logging
 from datetime import datetime, timezone, timedelta
 import uuid
@@ -59,28 +59,28 @@ def get_cached_eventbrite_credentials():
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Main Lambda handler for Eventbrite OAuth"""
+    """Main handler for Eventbrite OAuth operations"""
     try:
-        logger.info("Eventbrite OAuth handler called")
-        
         http_method = event.get('httpMethod', 'GET')
         path = event.get('path', '')
         
-        if '/oauth/authorize' in path and http_method == 'GET':
-            return handle_oauth_start(event, context)
-        elif '/oauth/callback' in path and http_method == 'GET':
-            return handle_oauth_callback(event, context)
-        elif '/oauth/status' in path and http_method == 'GET':
-            return handle_oauth_status(event)
-        elif '/oauth/disconnect' in path and http_method == 'POST':
-            return handle_oauth_disconnect(event)
-        elif '/oauth/refresh' in path and http_method == 'POST':
-            return handle_oauth_refresh(event)
+        print(f"🎫 Eventbrite OAuth: {http_method} {path}")
+        
+        if '/status' in path and http_method == 'GET':
+            return get_oauth_status(event)
+        elif '/authorize' in path and http_method == 'GET':
+            return initiate_oauth(event)
+        elif '/callback' in path and http_method == 'GET':
+            return handle_oauth_callback(event)
+        elif '/disconnect' in path and http_method == 'POST':
+            return disconnect_oauth(event)
+        elif '/health' in path and http_method == 'GET':
+            return create_cors_response(200, {'status': 'healthy', 'service': 'eventbrite-oauth'})
         else:
             return create_cors_response(404, {'error': 'Endpoint not found'})
             
     except Exception as e:
-        logger.error(f"Error in Eventbrite OAuth handler: {str(e)}")
+        print(f"💥 Handler Error: {str(e)}")
         return create_cors_response(500, {'error': str(e)})
 
 
@@ -98,52 +98,206 @@ def create_cors_response(status_code: int, body: dict) -> dict:
     }
 
 
-def handle_oauth_start(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Start OAuth flow - generate authorization URL"""
+def extract_user_from_auth_token(event: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract user email from JWT auth token in Authorization header
+    Returns the authenticated user's email, or None if not authenticated
+    """
     try:
-        # Get coach_id from query parameters
-        query_params = event.get('queryStringParameters') or {}
-        coach_id = query_params.get('coach_id')
+        headers = event.get('headers', {})
         
-        if not coach_id:
-            return create_cors_response(400, {'error': 'coach_id is required'})
+        # Get authorization header (case-insensitive)
+        auth_header = None
+        for header_name, header_value in headers.items():
+            if header_name.lower() == 'authorization':
+                auth_header = header_value
+                break
         
-        # Get Eventbrite credentials from Secrets Manager
+        if not auth_header:
+            print("⚠️ No Authorization header found")
+            return None
+        
+        if not auth_header.startswith('Bearer '):
+            print("⚠️ Invalid Authorization header format")
+            return None
+        
+        # Extract JWT token
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        
+        # Decode JWT payload (basic validation - assumes token is already validated by API Gateway)
+        import base64
+        import json
+        
+        # Split token into parts
+        token_parts = token.split('.')
+        if len(token_parts) != 3:
+            print("⚠️ Invalid JWT token format")
+            return None
+        
+        # Decode payload (second part)
+        payload_b64 = token_parts[1]
+        # Add padding if necessary
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += '=' * padding
+        
+        payload = json.loads(base64.b64decode(payload_b64))
+        
+        # Extract email from token payload
+        email = payload.get('email') or payload.get('username')
+        if email:
+            print(f"✅ Authenticated user extracted from token: {email}")
+            return email.lower().strip()
+        
+        print("⚠️ No email found in token payload")
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error extracting user from auth token: {str(e)}")
+        return None
+
+
+def get_oauth_status(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Get Eventbrite OAuth status for authenticated coach"""
+    try:
+        # Extract authenticated user from token - NO EMAIL PARAMETERS!
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_cors_response(401, {'error': 'Authentication required'})
+        
+        print(f"🔐 Fetching Eventbrite OAuth status for authenticated user: {authenticated_email}")
+        
+        # Use centralized ID mapping
+        profiles_table = get_dynamodb_table(get_table_name('profiles'))
+        
         try:
-            credentials = get_cached_eventbrite_credentials()
-            client_id = credentials.get('client_id')
-            
-            if not client_id:
-                return create_cors_response(500, {'error': 'Eventbrite client_id not found in credentials'})
-        except Exception as e:
-            logger.error(f"Error getting Eventbrite credentials: {str(e)}")
-            return create_cors_response(500, {'error': 'Eventbrite OAuth not configured'})
+            normalized_coach_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
+        except ValueError as e:
+            return create_cors_response(404, {'error': str(e)})
         
-        # Generate state parameter for security
-        state = generate_oauth_state(coach_id)
+        # Get coach profile and check OAuth status
+        response = profiles_table.get_item(Key={'profile_id': normalized_coach_id})
+        if 'Item' not in response:
+            return create_cors_response(404, {'error': 'Coach profile not found'})
         
-        # Build redirect URI - should point to our backend API, not frontend
-        # The callback will be handled by this same Lambda function via API Gateway
-        redirect_uri = f"{get_api_base_url(context)}/eventbrite/oauth/callback"
+        profile = response['Item']
         
-        # Generate OAuth URL
-        oauth_url = EventbriteClient.get_oauth_url(
-            client_id=client_id,
-            redirect_uri=redirect_uri,
-            state=state
-        )
+        # Verify the profile belongs to the authenticated user (security check)
+        if profile.get('email', '').lower() != authenticated_email:
+            print(f"🚨 Security violation: Authenticated user {authenticated_email} tried to access profile {profile.get('email')}")
+            return create_cors_response(403, {'error': 'Access denied'})
         
-        logger.info(f"Generated OAuth URL for coach {coach_id}: {oauth_url}")
-        logger.info(f"Redirect URI used: {redirect_uri}")
-        logger.info(f"Client ID used: {client_id}")
+        eventbrite_config = profile.get('eventbrite_config', {})
+        
+        oauth_status = {
+            'connected': bool(eventbrite_config.get('access_token')),
+            'organization_id': eventbrite_config.get('organization_id'),
+            'account_email': eventbrite_config.get('account_email'),
+            'connected_at': eventbrite_config.get('connected_at'),
+            'scopes': eventbrite_config.get('scopes', [])
+        }
         
         return create_cors_response(200, {
-            'authorization_url': oauth_url,
-            'state': state
+            'oauth_status': oauth_status,
+            'coach_id': normalized_coach_id
+        })
+        
+        except Exception as e:
+        print(f"💥 Error getting OAuth status: {str(e)}")
+        return create_cors_response(500, {'error': str(e)})
+
+
+def initiate_oauth(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Initiate Eventbrite OAuth flow for authenticated coach"""
+    try:
+        # Extract authenticated user from token - NO EMAIL PARAMETERS!
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_cors_response(401, {'error': 'Authentication required'})
+        
+        print(f"🔐 Initiating Eventbrite OAuth for authenticated user: {authenticated_email}")
+        
+        # Use centralized ID mapping
+        profiles_table = get_dynamodb_table(get_table_name('profiles'))
+        
+        try:
+            normalized_coach_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
+        except ValueError as e:
+            return create_cors_response(404, {'error': str(e)})
+        
+        # Generate OAuth state parameter for security
+        import secrets
+        state = secrets.token_urlsafe(32)
+        
+        # Store state in coach profile for verification
+        profiles_table.update_item(
+            Key={'profile_id': normalized_coach_id},
+            UpdateExpression='SET oauth_state = :state, oauth_state_expires = :expires',
+            ExpressionAttributeValues={
+                ':state': state,
+                ':expires': int((datetime.utcnow() + timedelta(minutes=10)).timestamp())
+            }
+        )
+        
+        # Build OAuth authorization URL
+        client_id = os.environ.get('EVENTBRITE_CLIENT_ID')
+        redirect_uri = os.environ.get('EVENTBRITE_REDIRECT_URI')
+        
+        if not client_id or not redirect_uri:
+            return create_cors_response(500, {'error': 'Eventbrite OAuth not configured'})
+        
+        auth_url = (
+            f"https://www.eventbrite.com/oauth/authorize"
+            f"?response_type=code"
+            f"&client_id={client_id}"
+            f"&redirect_uri={redirect_uri}"
+            f"&state={state}"
+            f"&scope=event_read%20event_write%20organization_read"
+        )
+        
+        return create_cors_response(200, {
+            'authorization_url': auth_url,
+            'state': state,
+            'coach_id': normalized_coach_id
         })
         
     except Exception as e:
-        logger.error(f"Error starting OAuth flow: {str(e)}")
+        print(f"💥 Error initiating OAuth: {str(e)}")
+        return create_cors_response(500, {'error': str(e)})
+
+
+def disconnect_oauth(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Disconnect Eventbrite OAuth for authenticated coach"""
+    try:
+        # Extract authenticated user from token - NO EMAIL PARAMETERS!
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_cors_response(401, {'error': 'Authentication required'})
+        
+        print(f"🔐 Disconnecting Eventbrite OAuth for authenticated user: {authenticated_email}")
+        
+        # Use centralized ID mapping
+        profiles_table = get_dynamodb_table(get_table_name('profiles'))
+        
+        try:
+            normalized_coach_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
+        except ValueError as e:
+            return create_cors_response(404, {'error': str(e)})
+        
+        # Clear Eventbrite configuration from profile
+        profiles_table.update_item(
+            Key={'profile_id': normalized_coach_id},
+            UpdateExpression='REMOVE eventbrite_config, oauth_state, oauth_state_expires',
+            ReturnValues='UPDATED_NEW'
+        )
+        
+        return create_cors_response(200, {
+            'message': 'Eventbrite OAuth disconnected successfully',
+            'coach_id': normalized_coach_id
+        })
+        
+    except Exception as e:
+        print(f"💥 Error disconnecting OAuth: {str(e)}")
         return create_cors_response(500, {'error': str(e)})
 
 
@@ -228,124 +382,6 @@ def handle_oauth_callback(event: Dict[str, Any], context: Any) -> Dict[str, Any]
     except Exception as e:
         logger.error(f"Error handling OAuth callback: {str(e)}")
         return create_redirect_response(f"{FRONTEND_URL}/coach/settings?eventbrite_error=server_error")
-
-
-def handle_oauth_status(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Get OAuth connection status for a coach"""
-    try:
-        query_params = event.get('queryStringParameters') or {}
-        coach_id = query_params.get('coach_id')
-        
-        if not coach_id:
-            return create_cors_response(400, {'error': 'coach_id is required'})
-        
-        config_table = get_dynamodb_table(get_table_name('eventbrite-config'))
-        
-        try:
-            response = config_table.get_item(Key={'coach_id': coach_id})
-            if 'Item' not in response:
-                return create_cors_response(200, {
-                    'connected': False,
-                    'status': 'not_connected'
-                })
-            
-            config = EventbriteConfig(**response['Item'])
-            
-            # Check if token is expired
-            is_expired = False
-            if config.token_expires_at:
-                expires_at = datetime.fromisoformat(config.token_expires_at)
-                is_expired = datetime.now(timezone.utc) >= expires_at
-            
-            return create_cors_response(200, {
-                'connected': config.oauth_status == EventbriteOAuthStatus.CONNECTED and not is_expired,
-                'status': config.oauth_status,
-                'organization_name': config.organization_name,
-                'expires_at': config.token_expires_at,
-                'is_expired': is_expired,
-                'last_sync': config.last_sync
-            })
-            
-        except Exception as e:
-            logger.error(f"Error getting OAuth status: {str(e)}")
-            return create_cors_response(200, {
-                'connected': False,
-                'status': 'error',
-                'error': str(e)
-            })
-        
-    except Exception as e:
-        logger.error(f"Error in OAuth status handler: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
-
-
-def handle_oauth_disconnect(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Disconnect Eventbrite account"""
-    try:
-        # Parse request body safely
-        body = event.get('body')
-        if body is None:
-            return create_cors_response(400, {'error': 'Request body is required'})
-        
-        try:
-            body = json.loads(body) if isinstance(body, str) else body
-        except json.JSONDecodeError:
-            return create_cors_response(400, {'error': 'Invalid JSON in request body'})
-        coach_id = body.get('coach_id')
-        
-        if not coach_id:
-            return create_cors_response(400, {'error': 'coach_id is required'})
-        
-        config_table = get_dynamodb_table(get_table_name('eventbrite-config'))
-        
-        # Update config to disconnected state
-        config_table.update_item(
-            Key={'coach_id': coach_id},
-            UpdateExpression='SET oauth_status = :status, access_token = :null, refresh_token = :null, updated_at = :now',
-            ExpressionAttributeValues={
-                ':status': EventbriteOAuthStatus.NOT_CONNECTED,
-                ':null': None,
-                ':now': get_current_timestamp()
-            }
-        )
-        
-        logger.info(f"Disconnected Eventbrite account for coach {coach_id}")
-        
-        return create_cors_response(200, {
-            'message': 'Eventbrite account disconnected successfully'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error disconnecting OAuth: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
-
-
-def handle_oauth_refresh(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Refresh OAuth token"""
-    try:
-        # Parse request body safely
-        body = event.get('body')
-        if body is None:
-            return create_cors_response(400, {'error': 'Request body is required'})
-        
-        try:
-            body = json.loads(body) if isinstance(body, str) else body
-        except json.JSONDecodeError:
-            return create_cors_response(400, {'error': 'Invalid JSON in request body'})
-        coach_id = body.get('coach_id')
-        
-        if not coach_id:
-            return create_cors_response(400, {'error': 'coach_id is required'})
-        
-        # TODO: Implement token refresh logic
-        # Eventbrite doesn't typically use refresh tokens in the same way as other OAuth providers
-        # We would need to re-authorize if the token expires
-        
-        return create_cors_response(501, {'error': 'Token refresh not implemented - please re-authorize'})
-        
-    except Exception as e:
-        logger.error(f"Error refreshing OAuth token: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
 
 
 def generate_oauth_state(coach_id: str) -> str:

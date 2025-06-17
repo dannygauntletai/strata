@@ -23,7 +23,8 @@ import { getCurrentUser } from '@/lib/auth'
 import { getCoachApiUrl } from '@/lib/ssm-config'
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://deibk5wgx1.execute-api.us-east-2.amazonaws.com/prod'
+// ✅ FIXED: Use proper API endpoint from SSM config
+// const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://deibk5wgx1.execute-api.us-east-2.amazonaws.com/prod'
 
 // Types
 interface ParentInvitation {
@@ -213,7 +214,7 @@ function CreateInvitationModal({
         <DialogPanel className="mx-auto max-w-md rounded-xl bg-white p-6 shadow-lg">
           <div className="flex items-center justify-between mb-4">
             <DialogTitle as="h3" className="text-lg font-semibold text-gray-900">
-              Invite Parent
+              Invite Parent to Platform
             </DialogTitle>
             <button
               onClick={onClose}
@@ -327,12 +328,27 @@ export function ParentInvitationsContent() {
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [apiBaseUrl, setApiBaseUrl] = useState<string>('')
 
+  // Load API endpoint from SSM
   useEffect(() => {
-    fetchInvitations()
+    try {
+      const url = getCoachApiUrl();
+      setApiBaseUrl(url);
+    } catch (error) {
+      console.error('Failed to load API endpoint:', error);
+    }
   }, [])
 
+  useEffect(() => {
+    if (apiBaseUrl) {
+      fetchInvitations()
+    }
+  }, [apiBaseUrl])
+
   const fetchInvitations = async () => {
+    if (!apiBaseUrl) return
+    
     try {
       setLoading(true)
       const user = getCurrentUser()
@@ -341,13 +357,19 @@ export function ParentInvitationsContent() {
         return
       }
 
-      // Fetch invitations filtered by coach
-      const response = await fetch(`${API_BASE_URL}/parent-invitations?coach_id=${encodeURIComponent(user.email)}`)
+      // ✅ FIXED: Remove coach_id parameter and use authentication headers
+      const response = await fetch(`${apiBaseUrl}/parent-invitations`, {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
+      
       if (response.ok) {
         const data = await response.json()
         setInvitations(data.invitations || [])
       } else {
-        console.error('Failed to fetch invitations:', response.statusText)
+        console.error('Failed to fetch invitations:', response.status, response.statusText)
       }
     } catch (error) {
       console.error('Error fetching invitations:', error)
@@ -357,23 +379,31 @@ export function ParentInvitationsContent() {
   }
 
   const handleCreateInvitation = async (formData: NewInvitationForm) => {
+    if (!apiBaseUrl) return
+    
     try {
       setSubmitting(true)
       const user = getCurrentUser()
+      if (!user?.email) {
+        console.error('No user email available')
+        return
+      }
       
+      // ✅ FIXED: Remove coach_id from body since backend uses auth context
       const invitationData = {
         parent_email: formData.parent_email,
         student_first_name: formData.student_first_name,
         student_last_name: formData.student_last_name,
         grade_level: formData.student_grade,
-        message: formData.notes,
-        coach_id: user?.email || 'unknown'
+        message: formData.notes
+        // ✅ REMOVED: coach_id - now extracted from auth token
       }
 
-      const response = await fetch(`${API_BASE_URL}/parent-invitations`, {
+      const response = await fetch(`${apiBaseUrl}/parent-invitations`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
         },
         body: JSON.stringify(invitationData)
       })
@@ -394,14 +424,26 @@ export function ParentInvitationsContent() {
   }
 
   const handleDeleteInvitation = async (invitationId: string) => {
+    if (!apiBaseUrl) return
+    
     const invitation = invitations.find(inv => inv.invitation_id === invitationId)
     const studentName = invitation ? `${invitation.student_first_name} ${invitation.student_last_name}` : 'this invitation'
     
     if (!confirm(`Are you sure you want to delete "${studentName}"? This action cannot be undone.`)) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/parent-invitations/${invitationId}`, {
-        method: 'DELETE'
+      const user = getCurrentUser()
+      if (!user?.email) {
+        console.error('No user email available')
+        return
+      }
+
+      const response = await fetch(`${apiBaseUrl}/parent-invitations/${invitationId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
       })
 
       if (response.ok) {
@@ -416,9 +458,21 @@ export function ParentInvitationsContent() {
   }
 
   const handleResendInvitation = async (invitationId: string) => {
+    if (!apiBaseUrl) return
+    
     try {
-      const response = await fetch(`${API_BASE_URL}/parent-invitations/${invitationId}/resend`, {
-        method: 'PUT'
+      const user = getCurrentUser()
+      if (!user?.email) {
+        console.error('No user email available')
+        return
+      }
+
+      const response = await fetch(`${apiBaseUrl}/parent-invitations/${invitationId}/resend`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
       })
 
       if (response.ok) {
@@ -453,14 +507,30 @@ export function ParentInvitationsContent() {
     )
   }
 
+  // Show loading if API URL not ready
+  if (!apiBaseUrl) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#004aad] mx-auto"></div>
+          <p className="mt-4 text-zinc-600">Loading API configuration...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       {/* Header following design theme typography */}
       <div className="flex items-end justify-between gap-4 mb-8">
         <div>
-          <Heading>Parent Invitations</Heading>
+          <Heading>Parent Platform Invitations</Heading>
           <p className="mt-2 text-zinc-500">
-            Manage parent invitations and track student enrollment status.
+            Invite parents to join your coaching platform for ongoing enrollment and communication.
+            <br />
+            <span className="text-sm text-amber-600">
+              💡 For event-specific invitations, use the Events page → individual event → "Invite Participants"
+            </span>
           </p>
         </div>
         <div className="flex gap-3">
@@ -477,7 +547,7 @@ export function ParentInvitationsContent() {
             disabled={submitting}
           >
             <PlusIcon className="-ml-1.5 mr-1 h-5 w-5" />
-            Invite Parent
+            Invite Parent to Platform
           </Button>
         </div>
       </div>
@@ -525,18 +595,20 @@ export function ParentInvitationsContent() {
       {invitations.length === 0 ? (
         <div className="text-center py-12">
           <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-semibold text-gray-900">No parent invitations</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by sending your first parent invitation.</p>
+          <h3 className="mt-2 text-sm font-semibold text-gray-900">No platform invitations</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Get started by inviting parents to join your coaching platform for ongoing enrollment.
+          </p>
           <div className="mt-6">
             <Button 
               className="bg-[#004aad] text-white hover:bg-[#003888] cursor-pointer"
               onClick={() => setShowCreateModal(true)}
             >
               <PlusIcon className="-ml-1 mr-1 h-5 w-5" />
-              Invite Parent
+              Invite Parent to Platform
             </Button>
-                </div>
-                </div>
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">
           {invitations.map((invitation) => (

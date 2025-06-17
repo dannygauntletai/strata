@@ -26,3 +26,11 @@ Project utilities/helpers that can be reused
 
 ### 9. Success Criteria
 Measurable criteria for completion
+
+### 10. Frontend Update Checklist
+When making backend changes, always verify and update frontend callsites:
+- Check all API endpoint references in frontend components
+- Update table names, field names, or data structures in frontend code
+- Verify authentication patterns match between frontend and backend
+- Test end-to-end functionality after backend changes
+- Update environment variables or configuration files if needed

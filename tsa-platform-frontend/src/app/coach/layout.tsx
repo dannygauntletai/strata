@@ -108,23 +108,23 @@ function ApplicationsDropdown({ isCollapsed }: { isCollapsed: boolean }) {
         {!isCollapsed && <ChevronDownIcon />}
       </DropdownButton>
       <DropdownMenu className="min-w-64" anchor="right start">
-        <DropdownItem href="/coach/applications">
+        <DropdownItem href="/applications">
           <Square2StackIcon />
           <DropdownLabel>Overview</DropdownLabel>
         </DropdownItem>
-        <DropdownItem href="/coach/applications/pending">
+        <DropdownItem href="/applications/pending">
           <DocumentIcon />
           <DropdownLabel>Pending</DropdownLabel>
         </DropdownItem>
-        <DropdownItem href="/coach/applications/accepted">
+        <DropdownItem href="/applications/accepted">
           <CheckCircleIcon />
           <DropdownLabel>Accepted</DropdownLabel>
         </DropdownItem>
-        <DropdownItem href="/coach/applications/tuition-deposit">
+        <DropdownItem href="/applications/tuition-deposit">
           <BanknotesIcon />
           <DropdownLabel>Tuition Deposit</DropdownLabel>
         </DropdownItem>
-        <DropdownItem href="/coach/applications/tuition">
+        <DropdownItem href="/applications/tuition">
           <GraduationIcon />
           <DropdownLabel>Tuition</DropdownLabel>
         </DropdownItem>
@@ -169,29 +169,11 @@ function CoachLayout({ children }: { children: React.ReactNode }) {
       const apiUrl = config.apiEndpoints.coach
       const authHeaders = getAuthHeader()
       
-      // Get user email for API authentication
-      const currentUser = localStorage.getItem('auth_token')
-      const userRole = localStorage.getItem('invitation_context')
-      let email = ''
-      
-      if (userRole) {
-        const roleData = JSON.parse(userRole)
-        email = roleData.email || ''
-      }
-      
-      if (!email && currentUser) {
-        // Try to extract email from token (this is a simplified approach)
-        email = 'coach@example.com' // Fallback - you'd get this from your auth system
-      }
-
-      if (!email) return // No email available, skip photo fetch
-
       const response = await fetch(`${apiUrl}/profile`, {
         method: 'GET',
         headers: {
           ...authHeaders,
-          'Content-Type': 'application/json',
-          'X-User-Email': email
+          'Content-Type': 'application/json'
         }
       })
 
@@ -293,20 +275,20 @@ function CoachLayout({ children }: { children: React.ReactNode }) {
                 <ScaleIcon className="h-6 w-6" />
                 <SidebarLabel className="text-base text-white">Legal</SidebarLabel>
               </SidebarItem>
-              <SidebarItem href="/coach/real-estate" current={pathname.startsWith('/coach/real-estate')} onClick={() => setMobileMenuOpen(false)}>
+              <SidebarItem href="/real-estate" current={pathname.startsWith('/real-estate')} onClick={() => setMobileMenuOpen(false)}>
                 <BuildingOffice2Icon className="h-6 w-6" />
                 <SidebarLabel className="text-base text-white">Real Estate</SidebarLabel>
               </SidebarItem>
               
               {/* Applications Menu Item */}
-              <SidebarItem href="/coach/applications" current={pathname.startsWith('/coach/applications')} onClick={() => setMobileMenuOpen(false)}>
+              <SidebarItem href="/applications" current={pathname.startsWith('/applications')} onClick={() => setMobileMenuOpen(false)}>
                 <DocumentArrowUpIcon className="h-6 w-6" />
                 <SidebarLabel className="text-base text-white">Applications</SidebarLabel>
               </SidebarItem>
               
-              <SidebarItem href="/coach/photos" current={pathname.startsWith('/coach/photos')} onClick={() => setMobileMenuOpen(false)}>
+              <SidebarItem href="/media" current={pathname.startsWith('/media')} onClick={() => setMobileMenuOpen(false)}>
                 <CameraIcon className="h-6 w-6" />
-                <SidebarLabel className="text-base text-white">Photos</SidebarLabel>
+                <SidebarLabel className="text-base text-white">Media</SidebarLabel>
               </SidebarItem>
             </SidebarSection>
 
@@ -399,7 +381,7 @@ function CoachLayout({ children }: { children: React.ReactNode }) {
                 <ScaleIcon className="h-8 w-8" />
                 {!isCollapsed && <SidebarLabel className="text-base text-white">Legal</SidebarLabel>}
               </SidebarItem>
-              <SidebarItem href="/coach/real-estate" current={pathname.startsWith('/coach/real-estate')} data-tour="real-estate-section">
+              <SidebarItem href="/real-estate" current={pathname.startsWith('/real-estate')} data-tour="real-estate-section">
                 <BuildingOffice2Icon className="h-8 w-8" />
                 {!isCollapsed && <SidebarLabel className="text-base text-white">Real Estate</SidebarLabel>}
               </SidebarItem>
@@ -407,9 +389,9 @@ function CoachLayout({ children }: { children: React.ReactNode }) {
               {/* Applications Dropdown */}
               <ApplicationsDropdown isCollapsed={isCollapsed} />
               
-              <SidebarItem href="/coach/photos" current={pathname.startsWith('/coach/photos')} data-tour="photos-section">
+              <SidebarItem href="/media" current={pathname.startsWith('/media')} data-tour="media-section">
                 <CameraIcon className="h-8 w-8" />
-                {!isCollapsed && <SidebarLabel className="text-base text-white">Photos</SidebarLabel>}
+                {!isCollapsed && <SidebarLabel className="text-base text-white">Media</SidebarLabel>}
               </SidebarItem>
             </SidebarSection>
 

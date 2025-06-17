@@ -1,0 +1,21 @@
+{
+  "version": "44.0.0",
+  "files": {
+    "26b78cf67115ce0999f00e6fd449c35fce78d097b1e833f42069795a63459a31": {
+      "displayName": "tsa-infra-frontend-dev Template",
+      "source": {
+        "path": "tsa-infra-frontend-dev.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "26b78cf67115ce0999f00e6fd449c35fce78d097b1e833f42069795a63459a31.json",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

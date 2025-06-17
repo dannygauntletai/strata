@@ -42,7 +42,9 @@ class CoachPortalService(Construct):
         self.shared_table_names = {
             "users": Fn.import_value(f"UnifiedPlatformUsersTable-{stage}"),
             "profiles": Fn.import_value(f"UnifiedPlatformProfilesTable-{stage}"),
-            "invitations": Fn.import_value(f"UnifiedPlatformInvitationsTable-{stage}"),
+            "coach-invitations": Fn.import_value(f"UnifiedPlatformCoachInvitationsTable-{stage}"),
+            "parent-invitations": Fn.import_value(f"UnifiedPlatformParentInvitationsTable-{stage}"),
+            "event-invitations": Fn.import_value(f"UnifiedPlatformEventInvitationsTable-{stage}"),
             "enrollments": Fn.import_value(f"UnifiedPlatformEnrollmentsTable-{stage}"),
             "events": Fn.import_value(f"UnifiedPlatformEventsTable-{stage}"),
             "documents": Fn.import_value(f"UnifiedPlatformDocumentsTable-{stage}")
@@ -184,8 +186,9 @@ class CoachPortalService(Construct):
                 # Shared table names from data infrastructure layer (single source of truth)
                 "USERS_TABLE": self.shared_table_names["users"],
                 "PROFILES_TABLE": self.shared_table_names["profiles"],
-                "INVITATIONS_TABLE": self.shared_table_names["invitations"],
-                "EVENT_INVITATIONS_TABLE": self.shared_table_names["invitations"],  # Alias for invitations handler
+                "INVITATIONS_TABLE": self.shared_table_names["coach-invitations"],  # Legacy env var for coach invitations
+                "EVENT_INVITATIONS_TABLE": self.shared_table_names["event-invitations"],
+                "PARENT_INVITATIONS_TABLE": self.shared_table_names["parent-invitations"],
                 "ENROLLMENTS_TABLE": self.shared_table_names["enrollments"],
                 "EVENTS_TABLE": self.shared_table_names["events"],
                 "DOCUMENTS_TABLE": self.shared_table_names["documents"],
@@ -319,7 +322,7 @@ class CoachPortalService(Construct):
             
             # Grant permissions to shared tables from centralized configuration
             shared_table_arns = []
-            for table_key in ["users", "profiles", "invitations", "enrollments", "events", "documents"]:
+            for table_key in ["users", "profiles", "coach-invitations", "parent-invitations", "event-invitations", "enrollments", "events", "documents"]:
                 table_name = self.resource_config.get_table_name(table_key)
                 shared_table_arns.extend([
                     f"arn:aws:dynamodb:*:*:table/{table_name}",
@@ -753,7 +756,7 @@ class CoachPortalService(Construct):
             # Shared tables from data infrastructure layer
             "users": self.shared_table_names["users"],
             "profiles": self.shared_table_names["profiles"],
-            "invitations": self.shared_table_names["invitations"],
+            "invitations": self.shared_table_names["coach-invitations"],
             "enrollments": self.shared_table_names["enrollments"],
             "events": self.shared_table_names["events"],
             "documents": self.shared_table_names["documents"]

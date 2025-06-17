@@ -21,6 +21,7 @@ import { PhotoIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { CalendarDaysIcon, CheckCircleIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import { useSearchParams } from 'next/navigation'
 import { getCoachApiUrl } from '@/lib/ssm-config'
+import { getCurrentUser } from '@/lib/auth'
 
 // API Configuration
 // API endpoint loaded from SSM - TODO: implement API integration
@@ -63,21 +64,18 @@ function SettingsContent() {
     if (!apiBaseUrl) return
 
     try {
-      // Get current user email from localStorage
-      const userRole = localStorage.getItem('invitation_context')
-      let email = ''
-      
-      if (userRole) {
-        const roleData = JSON.parse(userRole)
-        email = roleData.email || ''
-      }
-
-      if (!email) {
-        console.log('No email found in localStorage')
+      const user = getCurrentUser()
+      if (!user?.email) {
+        console.log('No user available')
         return
       }
 
-      const response = await fetch(`${apiBaseUrl}/profile?email=${encodeURIComponent(email)}`)
+      const response = await fetch(`${apiBaseUrl}/profile`, {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
       
       if (response.ok) {
         const data = await response.json()
@@ -130,17 +128,9 @@ function SettingsContent() {
     if (!apiBaseUrl) return
 
     try {
-      // Get current user email
-      const userRole = localStorage.getItem('invitation_context')
-      let email = ''
-      
-      if (userRole) {
-        const roleData = JSON.parse(userRole)
-        email = roleData.email || ''
-      }
-
-      if (!email) {
-        setUploadError('User email not found')
+      const user = getCurrentUser()
+      if (!user?.email) {
+        setUploadError('User not authenticated')
         setIsUploading(false)
         return
       }
@@ -149,9 +139,9 @@ function SettingsContent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
         },
         body: JSON.stringify({
-          email: email,
           photo_data: base64Data,
           filename: filename
         }),
@@ -188,17 +178,14 @@ function SettingsContent() {
     setGoogleCalendarError(null)
     setGoogleCalendarSuccess(null)
     
-    // Get current user email
-    const userRole = localStorage.getItem('invitation_context')
-    let email = ''
-    
-    if (userRole) {
-      const roleData = JSON.parse(userRole)
-      email = roleData.email || ''
+    const user = getCurrentUser()
+    if (!user?.email) {
+      setGoogleCalendarError('Please log in to connect Google Calendar')
+      setIsConnecting(false)
+      return
     }
 
-    // Redirect to Google OAuth with coach email
-    const authUrl = `/api/google-calendar/auth?coach_email=${encodeURIComponent(email)}`
+    const authUrl = `/api/google-calendar/auth`
     window.location.href = authUrl
   }
 
@@ -208,14 +195,19 @@ function SettingsContent() {
     setGoogleCalendarSuccess(null)
 
     try {
+      const user = getCurrentUser()
+      if (!user?.email) {
+        setGoogleCalendarError('User not authenticated')
+        setIsDisconnecting(false)
+        return
+      }
+
       const response = await fetch(`${apiBaseUrl}/coach/google-calendar/disconnect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          coach_email: googleCalendarEmail // Use the connected Google email
-        }),
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
       })
 
       if (response.ok) {
@@ -238,21 +230,19 @@ function SettingsContent() {
     if (!apiBaseUrl) return
 
     try {
-      // Get current user email
-      const userRole = localStorage.getItem('invitation_context')
-      let email = ''
-      
-      if (userRole) {
-        const roleData = JSON.parse(userRole)
-        email = roleData.email || ''
-      }
+      const user = getCurrentUser()
+      if (!user?.email) return
 
-      const response = await fetch(`${apiBaseUrl}/coach/google-calendar/status?coach_email=${encodeURIComponent(email)}`)
+      const response = await fetch(`${apiBaseUrl}/coach/google-calendar/status`, {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
       
       if (response.ok) {
         const data = await response.json()
-        setGoogleCalendarConnected(data.connected)
-        setGoogleCalendarEmail(data.google_email)
+        setGoogleCalendarConnected(data.connected || false)
       }
     } catch (error) {
       console.error('Error checking Google Calendar status:', error)

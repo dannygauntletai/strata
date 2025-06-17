@@ -1,0 +1,6 @@
+# Admin backend has minimal dependencies
+# boto3 is provided by AWS Lambda runtime
+# Only adding this as a placeholder for future dependencies 
+
+sendgrid==6.10.0
+python-http-client==3.3.7 

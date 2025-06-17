@@ -6,79 +6,144 @@ Handles invitations to events (not parent invitations to join platform).
 import json
 import os
 import boto3
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
 # Import centralized models and utilities - NO fallback pattern
 from shared_utils import (
-    create_api_response, parse_event_body, get_current_time, 
+    parse_event_body, get_current_time, 
     standardize_error_response, get_table_name, get_dynamodb_table,
-    generate_id, validate_email, UserIdentifier, CoachProfile
+    generate_id, validate_email, CoachProfile
 )
+from user_identifier import UserIdentifier
+
+
+def create_cors_response(status_code: int, body: dict) -> dict:
+    """Create standardized response with proper CORS headers"""
+    return {
+        "statusCode": status_code,
+        "headers": {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD",
+            "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Requested-With,Accept,Accept-Language,Cache-Control",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600",
+            "Content-Type": "application/json"
+        },
+        "body": json.dumps(body, default=str)
+    }
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Main handler - NO CORS, uses centralized models"""
+    """Main handler for invitations operations"""
     try:
-        http_method = event.get('httpMethod', '')
-        path_params = event.get('pathParameters') or {}
+        http_method = event.get('httpMethod', 'GET')
         path = event.get('path', '')
+        path_params = event.get('pathParameters') or {}
         
-        print(f"📨 Invitations: {http_method} {path}")
+        print(f"🎫 Invitations: {http_method} {path}")
         
-        if http_method == 'GET':
-            if '/parents/' in path:
-                if 'invitation_id' in path_params:
-                    return get_parent_invitation(path_params['invitation_id'])
-                else:
-                    return list_parent_invitations(event)
-            elif 'invitation_id' in path_params:
-                return get_invitation(path_params['invitation_id'])
-            else:
-                return list_invitations(event)
-        elif http_method == 'POST':
-            if '/parents' in path:
-                if '/send' in path:
-                    return send_parent_invitations(event)
-                elif '/bulk' in path:
-                    return send_bulk_parent_invitations(event)
-                else:
-                    return create_parent_invitation(event)
-            elif '/send' in path:
-                return send_invitations(event)
-            elif '/bulk' in path:
-                return send_bulk_invitations(event)
-            else:
+        if '/event-invitations' in path:
+            # Event invitations endpoints (use dedicated table)
+            if http_method == 'POST':
                 return create_invitation(event)
-        elif http_method == 'PUT':
-            if 'invitation_id' in path_params:
-                if '/respond' in path:
-                    return respond_to_invitation(path_params['invitation_id'], event)
-                else:
-                    return update_invitation(path_params['invitation_id'], event)
-            else:
-                return create_api_response(400, {'error': 'Invitation ID required for update'})
-        elif http_method == 'DELETE':
-            if 'invitation_id' in path_params:
-                return delete_invitation(path_params['invitation_id'])
-            else:
-                return create_api_response(400, {'error': 'Invitation ID required for deletion'})
+            elif http_method == 'GET' and not path_params.get('id'):
+                return list_invitations(event)
+            elif http_method == 'GET' and path_params.get('id'):
+                return get_invitation(path_params['id'])
+            elif http_method == 'PUT' and path_params.get('id'):
+                return update_invitation(path_params['id'], event)
+            elif http_method == 'DELETE' and path_params.get('id'):
+                return delete_invitation(path_params['id'])
+                
+        elif '/event-invitations/send' in path and http_method == 'POST':
+                return send_invitations(event)
+        elif '/event-invitations/bulk' in path and http_method == 'POST':
+                return send_bulk_invitations(event)
+        elif '/event-invitations/respond' in path and http_method == 'POST':
+            return respond_to_invitation(path_params.get('id'), event)
+            
+        # Parent invitations endpoints (use main invitations table)
+        elif '/parent-invitations' in path:
+            if http_method == 'POST':
+                return create_parent_invitation(event)
+            elif http_method == 'GET' and not path_params.get('id'):
+                return list_parent_invitations(event)
+            elif http_method == 'GET' and path_params.get('id'):
+                return get_parent_invitation(path_params['id'])
+                
+        elif '/parent-invitations/send' in path and http_method == 'POST':
+            return send_parent_invitations(event)
+        elif '/parent-invitations/bulk' in path and http_method == 'POST':
+            return send_bulk_parent_invitations(event)
+                
         elif '/health' in path and http_method == 'GET':
             return get_health_status()
         else:
-            return create_api_response(404, {
-                'error': 'Endpoint not found',
-                'available_endpoints': [
-                    'GET /invitations', 'GET /invitations/{id}', 'POST /invitations',
-                    'POST /invitations/send', 'POST /invitations/bulk',
-                    'PUT /invitations/{id}', 'PUT /invitations/{id}/respond',
-                    'DELETE /invitations/{id}'
-                ]
-            })
+            return create_cors_response(404, {'error': 'Endpoint not found'})
             
     except Exception as e:
         print(f"💥 Handler Error: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "lambda_handler"))
+        return create_cors_response(500, standardize_error_response(e, "lambda_handler"))
+
+
+def extract_user_from_auth_token(event: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract user email from JWT auth token in Authorization header
+    Returns the authenticated user's email, or None if not authenticated
+    """
+    try:
+        headers = event.get('headers', {})
+        
+        # Get authorization header (case-insensitive)
+        auth_header = None
+        for header_name, header_value in headers.items():
+            if header_name.lower() == 'authorization':
+                auth_header = header_value
+                break
+        
+        if not auth_header:
+            print("⚠️ No Authorization header found")
+            return None
+        
+        if not auth_header.startswith('Bearer '):
+            print("⚠️ Invalid Authorization header format")
+            return None
+        
+        # Extract JWT token
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        
+        # Decode JWT payload (basic validation - assumes token is already validated by API Gateway)
+        import base64
+        import json
+        
+        # Split token into parts
+        token_parts = token.split('.')
+        if len(token_parts) != 3:
+            print("⚠️ Invalid JWT token format")
+            return None
+        
+        # Decode payload (second part)
+        payload_b64 = token_parts[1]
+        # Add padding if necessary
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += '=' * padding
+        
+        payload = json.loads(base64.b64decode(payload_b64))
+        
+        # Extract email from token payload
+        email = payload.get('email') or payload.get('username')
+        if email:
+            print(f"✅ Authenticated user extracted from token: {email}")
+            return email.lower().strip()
+        
+        print("⚠️ No email found in token payload")
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error extracting user from auth token: {str(e)}")
+        return None
 
 
 def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -90,11 +155,11 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         required_fields = ['event_id', 'invitee_email', 'inviter_id']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
-            return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
+            return create_cors_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
         # Validate email format
         if not validate_email(body['invitee_email']):
-            return create_api_response(400, {'error': 'Invalid email format'})
+            return create_cors_response(400, {'error': 'Invalid email format'})
         
         # Use centralized ID mapping for inviter_id
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -102,7 +167,7 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_inviter_id = UserIdentifier.normalize_coach_id(body['inviter_id'], profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': f'Inviter not found: {str(e)}'})
+            return create_cors_response(404, {'error': f'Inviter not found: {str(e)}'})
         
         invitations_table = get_dynamodb_table(get_table_name('event_invitations'))
         events_table = get_dynamodb_table(get_table_name('events'))
@@ -110,7 +175,7 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         # Check if event exists
         event_response = events_table.get_item(Key={'event_id': body['event_id']})
         if 'Item' not in event_response:
-            return create_api_response(404, {'error': 'Event not found'})
+            return create_cors_response(404, {'error': 'Event not found'})
         
         event_data = event_response['Item']
         
@@ -124,7 +189,7 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         )
         
         if existing_invitation['Items']:
-            return create_api_response(400, {'error': 'Invitation already exists for this email'})
+            return create_cors_response(400, {'error': 'Invitation already exists for this email'})
         
         # Create invitation with centralized ID generation
         invitation_id = generate_id('invitation')
@@ -152,14 +217,14 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         invitations_table.put_item(Item=invitation_data)
         
         print(f"✅ Event invitation created: {invitation_id}")
-        return create_api_response(201, {
+        return create_cors_response(201, {
             'message': 'Invitation created successfully',
             'invitation': invitation_data
         })
         
     except Exception as e:
         print(f"💥 Error creating invitation: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "create_invitation"))
+        return create_cors_response(500, standardize_error_response(e, "create_invitation"))
 
 
 def send_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -171,7 +236,7 @@ def send_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         required_fields = ['invitation_ids']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
-            return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
+            return create_cors_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
         invitations_table = get_dynamodb_table(get_table_name('event_invitations'))
         sent_count = 0
@@ -240,7 +305,7 @@ def send_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
                 })
                 failed_count += 1
         
-        return create_api_response(200, {
+        return create_cors_response(200, {
             'message': f'Processed {len(body["invitation_ids"])} invitations',
             'sent_count': sent_count,
             'failed_count': failed_count,
@@ -249,7 +314,7 @@ def send_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error sending invitations: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "send_invitations"))
+        return create_cors_response(500, standardize_error_response(e, "send_invitations"))
 
 
 def send_bulk_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -261,10 +326,10 @@ def send_bulk_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         required_fields = ['event_id', 'invitees', 'inviter_id']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
-            return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
+            return create_cors_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
         if not isinstance(body['invitees'], list) or len(body['invitees']) == 0:
-            return create_api_response(400, {'error': 'Invitees must be a non-empty list'})
+            return create_cors_response(400, {'error': 'Invitees must be a non-empty list'})
         
         # Use centralized ID mapping for inviter_id
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
@@ -272,7 +337,7 @@ def send_bulk_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized_inviter_id = UserIdentifier.normalize_coach_id(body['inviter_id'], profiles_table)
         except ValueError as e:
-            return create_api_response(404, {'error': f'Inviter not found: {str(e)}'})
+            return create_cors_response(404, {'error': f'Inviter not found: {str(e)}'})
         
         events_table = get_dynamodb_table(get_table_name('events'))
         invitations_table = get_dynamodb_table(get_table_name('event_invitations'))
@@ -280,7 +345,7 @@ def send_bulk_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         # Check if event exists
         event_response = events_table.get_item(Key={'event_id': body['event_id']})
         if 'Item' not in event_response:
-            return create_api_response(404, {'error': 'Event not found'})
+            return create_cors_response(404, {'error': 'Event not found'})
         
         event_data = event_response['Item']
         
@@ -363,7 +428,7 @@ def send_bulk_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
                 print(f"Error processing invitee {invitee.get('email', 'unknown')}: {str(e)}")
                 failed_count += 1
         
-        return create_api_response(201, {
+        return create_cors_response(201, {
             'message': f'Created {len(created_invitations)} invitations',
             'created_count': len(created_invitations),
             'sent_count': sent_count,
@@ -373,7 +438,7 @@ def send_bulk_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error creating bulk invitations: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "send_bulk_invitations"))
+        return create_cors_response(500, standardize_error_response(e, "send_bulk_invitations"))
 
 
 def send_invitation_email(invitation: Dict[str, Any]) -> bool:
@@ -479,28 +544,28 @@ def respond_to_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str
         required_fields = ['response']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
-            return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
+            return create_cors_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
         if body['response'] not in ['accept', 'decline']:
-            return create_api_response(400, {'error': 'Response must be "accept" or "decline"'})
+            return create_cors_response(400, {'error': 'Response must be "accept" or "decline"'})
         
         invitations_table = get_dynamodb_table(get_table_name('event_invitations'))
         
         # Get invitation
         invitation_response = invitations_table.get_item(Key={'invitation_id': invitation_id})
         if 'Item' not in invitation_response:
-            return create_api_response(404, {'error': 'Invitation not found'})
+            return create_cors_response(404, {'error': 'Invitation not found'})
         
         invitation = invitation_response['Item']
         
         # Check if invitation is still valid
         if invitation['status'] in ['accepted', 'declined']:
-            return create_api_response(400, {'error': 'Invitation has already been responded to'})
+            return create_cors_response(400, {'error': 'Invitation has already been responded to'})
         
         # Check if invitation has expired
         expires_at = datetime.fromisoformat(invitation['expires_at'])
         if datetime.utcnow() > expires_at:
-            return create_api_response(400, {'error': 'Invitation has expired'})
+            return create_cors_response(400, {'error': 'Invitation has expired'})
         
         # Update invitation
         invitations_table.update_item(
@@ -542,7 +607,7 @@ def respond_to_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str
             
             registrations_table.put_item(Item=registration_data)
         
-        return create_api_response(200, {
+        return create_cors_response(200, {
             'message': f'Invitation {body["response"]}ed successfully',
             'invitation_id': invitation_id,
             'response': body['response']
@@ -550,7 +615,7 @@ def respond_to_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str
         
     except Exception as e:
         print(f"💥 Error responding to invitation: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "respond_to_invitation"))
+        return create_cors_response(500, standardize_error_response(e, "respond_to_invitation"))
 
 
 def get_invitation(invitation_id: str) -> Dict[str, Any]:
@@ -561,7 +626,7 @@ def get_invitation(invitation_id: str) -> Dict[str, Any]:
         response = invitations_table.get_item(Key={'invitation_id': invitation_id})
         
         if 'Item' not in response:
-            return create_api_response(404, {'error': 'Invitation not found'})
+            return create_cors_response(404, {'error': 'Invitation not found'})
         
         invitation = response['Item']
         
@@ -572,11 +637,11 @@ def get_invitation(invitation_id: str) -> Dict[str, Any]:
         if 'Item' in event_response:
             invitation['event_details'] = event_response['Item']
         
-        return create_api_response(200, {'invitation': invitation})
+        return create_cors_response(200, {'invitation': invitation})
         
     except Exception as e:
         print(f"💥 Error getting invitation: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "get_invitation"))
+        return create_cors_response(500, standardize_error_response(e, "get_invitation"))
 
 
 def list_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -595,7 +660,7 @@ def list_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
             try:
                 normalized_inviter_id = UserIdentifier.normalize_coach_id(inviter_id, profiles_table)
             except ValueError as e:
-                return create_api_response(404, {'error': str(e)})
+                return create_cors_response(404, {'error': str(e)})
         
         invitations_table = get_dynamodb_table(get_table_name('event_invitations'))
         
@@ -635,14 +700,14 @@ def list_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         # Sort by created_at descending
         invitations.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         
-        return create_api_response(200, {
+        return create_cors_response(200, {
             'invitations': invitations,
             'count': len(invitations)
         })
         
     except Exception as e:
         print(f"💥 Error listing invitations: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "list_invitations"))
+        return create_cors_response(500, standardize_error_response(e, "list_invitations"))
 
 
 def update_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -655,7 +720,7 @@ def update_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, An
         # Check if invitation exists
         response = invitations_table.get_item(Key={'invitation_id': invitation_id})
         if 'Item' not in response:
-            return create_api_response(404, {'error': 'Invitation not found'})
+            return create_cors_response(404, {'error': 'Invitation not found'})
         
         # Build update expression
         updatable_fields = ['message', 'expires_at']
@@ -668,7 +733,7 @@ def update_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, An
                 expression_values[f':{field}'] = body[field]
         
         if not update_expressions:
-            return create_api_response(400, {'error': 'No valid fields to update'})
+            return create_cors_response(400, {'error': 'No valid fields to update'})
         
         # Always update the updated_at timestamp
         update_expressions.append('updated_at = :updated_at')
@@ -683,14 +748,14 @@ def update_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, An
         # Get updated invitation
         updated_response = invitations_table.get_item(Key={'invitation_id': invitation_id})
         
-        return create_api_response(200, {
+        return create_cors_response(200, {
             'message': 'Invitation updated successfully',
             'invitation': updated_response['Item']
         })
         
     except Exception as e:
         print(f"💥 Error updating invitation: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "update_invitation"))
+        return create_cors_response(500, standardize_error_response(e, "update_invitation"))
 
 
 def delete_invitation(invitation_id: str) -> Dict[str, Any]:
@@ -701,20 +766,20 @@ def delete_invitation(invitation_id: str) -> Dict[str, Any]:
         # Check if invitation exists
         response = invitations_table.get_item(Key={'invitation_id': invitation_id})
         if 'Item' not in response:
-            return create_api_response(404, {'error': 'Invitation not found'})
+            return create_cors_response(404, {'error': 'Invitation not found'})
         
         # Delete the invitation
         invitations_table.delete_item(Key={'invitation_id': invitation_id})
         
         print(f"🗑️ Event invitation deleted: {invitation_id}")
-        return create_api_response(200, {
+        return create_cors_response(200, {
             'message': 'Invitation deleted successfully',
             'invitation_id': invitation_id
         })
         
     except Exception as e:
         print(f"💥 Error deleting invitation: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "delete_invitation"))
+        return create_cors_response(500, standardize_error_response(e, "delete_invitation"))
 
 
 def get_health_status() -> Dict[str, Any]:
@@ -724,14 +789,14 @@ def get_health_status() -> Dict[str, Any]:
         invitations_table = get_dynamodb_table(get_table_name('event_invitations'))
         invitations_table.scan(Limit=1)
         
-        return create_api_response(200, {
+        return create_cors_response(200, {
             'status': 'healthy',
             'service': 'invitations-handler',
             'timestamp': get_current_time()
         })
         
     except Exception as e:
-        return create_api_response(500, {
+        return create_cors_response(500, {
             'status': 'unhealthy',
             'error': str(e),
             'timestamp': get_current_time()
@@ -739,7 +804,7 @@ def get_health_status() -> Dict[str, Any]:
 
 
 # ============================================================================
-# PARENT INVITATION FUNCTIONS (Use main invitations-v1-dev table)
+# PARENT INVITATION FUNCTIONS (Use parent-invitations table - coach sends to parents for platform enrollment)
 # ============================================================================
 
 def create_parent_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -751,23 +816,27 @@ def create_parent_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         required_fields = ['parent_email', 'coach_id']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
-            return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
+            return create_cors_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
         # Validate email format
         if not validate_email(body['parent_email']):
-            return create_api_response(400, {'error': 'Invalid email format'})
+            return create_cors_response(400, {'error': 'Invalid email format'})
         
-        # Use main invitations table (same as admin backend uses)
-        invitations_table = get_dynamodb_table('invitations-v1-dev')
+            # Use parent invitations table (coach-specific parent enrollment invitations)
+    invitations_table = get_dynamodb_table(get_table_name('parent-invitations'))
         
         # Use centralized ID mapping for coach_id
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
         
         try:
             normalized_coach_id = UserIdentifier.normalize_coach_id(body['coach_id'], profiles_table)
-            coach_profile = CoachProfile.get_by_id(normalized_coach_id, profiles_table)
+            # Get coach profile data directly from table
+            coach_response = profiles_table.get_item(Key={'profile_id': normalized_coach_id})
+            if 'Item' not in coach_response:
+                raise ValueError(f"Coach profile not found for ID: {normalized_coach_id}")
+            coach_profile = coach_response['Item']
         except ValueError as e:
-            return create_api_response(404, {'error': f'Coach not found: {str(e)}'})
+            return create_cors_response(404, {'error': f'Coach not found: {str(e)}'})
         
         # Check for existing pending parent invitation for this email
         existing_check = invitations_table.scan(
@@ -781,7 +850,7 @@ def create_parent_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         )
         
         if existing_check.get('Items'):
-            return create_api_response(409, {'error': 'Active parent invitation already exists for this email'})
+            return create_cors_response(409, {'error': 'Active parent invitation already exists for this email'})
         
         # Generate invitation
         invitation_id = generate_id('invitation')
@@ -818,79 +887,76 @@ def create_parent_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         response_data['invitation_url'] = f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/parent/invitation?token={invitation_token}"
         
         print(f"✅ Parent invitation created: {invitation_id}")
-        return create_api_response(201, {
+        return create_cors_response(201, {
             'message': 'Parent invitation created successfully',
             'invitation': response_data
         })
         
     except Exception as e:
         print(f"💥 Error creating parent invitation: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "create_parent_invitation"))
+        return create_cors_response(500, standardize_error_response(e, "create_parent_invitation"))
 
 
 def list_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
-    """List parent invitations from main invitations table"""
+    """List parent invitations for authenticated coach from main invitations table"""
     try:
-        query_params = event.get('queryStringParameters') or {}
-        coach_id = query_params.get('coach_id')
+        # Extract authenticated user from token - NO EMAIL PARAMETERS!
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_cors_response(401, {'error': 'Authentication required'})
         
-        # Use main invitations table
-        invitations_table = get_dynamodb_table('invitations-v1-dev')
+        print(f"🔐 Fetching parent invitations for authenticated user: {authenticated_email}")
         
-        if coach_id:
-            # Filter by coach (normalize coach ID first)
-            profiles_table = get_dynamodb_table(get_table_name('profiles'))
-            try:
-                normalized_coach_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
-            except ValueError:
-                return create_api_response(404, {'error': 'Coach not found'})
-            
-            response = invitations_table.scan(
-                FilterExpression='#role = :role AND coach_id = :coach_id',
-                ExpressionAttributeNames={'#role': 'role'},
-                ExpressionAttributeValues={
-                    ':role': 'parent',
-                    ':coach_id': normalized_coach_id
-                }
-            )
-        else:
-            # Get all parent invitations
-            response = invitations_table.scan(
-                FilterExpression='#role = :role',
-                ExpressionAttributeNames={'#role': 'role'},
-                ExpressionAttributeValues={':role': 'parent'}
-            )
+        # Use centralized ID mapping to get normalized coach_id
+        profiles_table = get_dynamodb_table(get_table_name('profiles'))
+        try:
+            normalized_coach_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
+        except ValueError as e:
+            return create_cors_response(404, {'error': str(e)})
+        
+            # Use parent invitations table (coach sends to parents for platform enrollment)
+    invitations_table = get_dynamodb_table(get_table_name('parent-invitations'))
+        
+        # Filter by authenticated coach only
+        response = invitations_table.scan(
+            FilterExpression='#role = :role AND coach_id = :coach_id',
+            ExpressionAttributeNames={'#role': 'role'},
+            ExpressionAttributeValues={
+                ':role': 'parent',
+                ':coach_id': normalized_coach_id
+            }
+        )
         
         invitations = response.get('Items', [])
         
         # Sort by created_at descending
         invitations.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         
-        return create_api_response(200, {
+        return create_cors_response(200, {
             'invitations': invitations,
             'count': len(invitations)
         })
         
     except Exception as e:
         print(f"💥 Error listing parent invitations: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "list_parent_invitations"))
+        return create_cors_response(500, standardize_error_response(e, "list_parent_invitations"))
 
 
 def get_parent_invitation(invitation_id: str) -> Dict[str, Any]:
     """Get specific parent invitation details"""
     try:
-        invitations_table = get_dynamodb_table('invitations-v1-dev')
-        
-        response = invitations_table.get_item(Key={'invitation_id': invitation_id})
+            invitations_table = get_dynamodb_table(get_table_name('parent-invitations'))
+    
+    response = invitations_table.get_item(Key={'invitation_id': invitation_id})
         
         if 'Item' not in response or response['Item'].get('role') != 'parent':
-            return create_api_response(404, {'error': 'Parent invitation not found'})
+            return create_cors_response(404, {'error': 'Parent invitation not found'})
         
-        return create_api_response(200, {'invitation': response['Item']})
+        return create_cors_response(200, {'invitation': response['Item']})
         
     except Exception as e:
         print(f"💥 Error getting parent invitation: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "get_parent_invitation"))
+        return create_cors_response(500, standardize_error_response(e, "get_parent_invitation"))
 
 
 def send_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -901,9 +967,9 @@ def send_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         required_fields = ['invitation_ids']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
-            return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
+            return create_cors_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
-        invitations_table = get_dynamodb_table('invitations-v1-dev')
+        invitations_table = get_dynamodb_table(get_table_name('parent-invitations'))
         
         sent_count = 0
         failed_count = 0
@@ -971,7 +1037,7 @@ def send_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
                 })
                 failed_count += 1
         
-        return create_api_response(200, {
+        return create_cors_response(200, {
             'message': f'Processed {len(body["invitation_ids"])} parent invitations',
             'sent_count': sent_count,
             'failed_count': failed_count,
@@ -980,7 +1046,7 @@ def send_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error sending parent invitations: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "send_parent_invitations"))
+        return create_cors_response(500, standardize_error_response(e, "send_parent_invitations"))
 
 
 def send_bulk_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -991,10 +1057,10 @@ def send_bulk_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         required_fields = ['parents', 'coach_id']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
-            return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
+            return create_cors_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
         if not isinstance(body['parents'], list) or len(body['parents']) == 0:
-            return create_api_response(400, {'error': 'Parents must be a non-empty list'})
+            return create_cors_response(400, {'error': 'Parents must be a non-empty list'})
         
         created_invitations = []
         sent_count = 0
@@ -1028,7 +1094,7 @@ def send_bulk_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
                         
                         if email_sent:
                             # Update status to sent
-                            invitations_table = get_dynamodb_table('invitations-v1-dev')
+                            invitations_table = get_dynamodb_table(get_table_name('parent-invitations'))
                             invitations_table.update_item(
                                 Key={'invitation_id': invitation_data['invitation_id']},
                                 UpdateExpression='SET #status = :status, sent_at = :sent_at, updated_at = :updated_at',
@@ -1049,7 +1115,7 @@ def send_bulk_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
                 print(f"Error processing parent {parent_data.get('email', 'unknown')}: {str(e)}")
                 failed_count += 1
         
-        return create_api_response(201, {
+        return create_cors_response(201, {
             'message': f'Created {len(created_invitations)} parent invitations',
             'created_count': len(created_invitations),
             'sent_count': sent_count,
@@ -1059,7 +1125,7 @@ def send_bulk_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"💥 Error creating bulk parent invitations: {str(e)}")
-        return create_api_response(500, standardize_error_response(e, "send_bulk_parent_invitations"))
+        return create_cors_response(500, standardize_error_response(e, "send_bulk_parent_invitations"))
 
 
 def send_parent_invitation_email(invitation: Dict[str, Any]) -> bool:

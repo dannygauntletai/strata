@@ -25,12 +25,15 @@ import {
   EnvelopeIcon,
   ArrowRightStartOnRectangleIcon,
   ChevronDownIcon,
+  LockClosedIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/solid'
 import { useState, useEffect, useRef } from 'react'
 import { getCurrentUser, type AuthUser } from '@/lib/auth'
 import { CoachOnboardingTour } from '@/components/coach-onboarding-tour'
 import { BootcampStep, ReviewMaterialsStep, FindRealEstateStep, HostEventsStep, SimpleStep } from '@/components/dashboard-steps'
 import { getCoachApiUrl } from '@/lib/ssm-config'
+import { useSearchParams } from 'next/navigation'
 
 interface ParentInvitation {
   invitation_id: string
@@ -91,6 +94,9 @@ const openingSteps = [
 export default function CoachDashboard() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('')
+  const searchParams = useSearchParams()
+  const [showLockedNotification, setShowLockedNotification] = useState(false)
+  const [lockedRoute, setLockedRoute] = useState('')
   
   // Tour state
   const [showTour, setShowTour] = useState(false)
@@ -147,91 +153,83 @@ export default function CoachDashboard() {
 
   const fetchRecentEvents = async () => {
     try {
-      setEventsLoading(true)
+      setRecentEvents([])  // Clear before loading
       const user = getCurrentUser()
       if (!user?.email) {
-        console.error('No user email available for events')
+        console.error('No user email available')
         return
       }
 
-      const response = await fetch(`${apiBaseUrl}/events?created_by=${encodeURIComponent(user.email)}&limit=5`)
+      const response = await fetch(`${apiBaseUrl}/events`, {  // ✅ REMOVED: email parameter
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
+
       if (response.ok) {
         const data = await response.json()
-        // Sort by start_date and take most recent
-        const sortedEvents = (data.events || []).sort((a: any, b: any) => 
-          new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-        )
-        setRecentEvents(sortedEvents.slice(0, 3)) // Show top 3 recent events
-        console.log('Recent events fetched:', sortedEvents.slice(0, 3))
-      } else {
-        console.error('Failed to fetch recent events:', response.statusText)
+        setRecentEvents(data.events?.slice(0, 3) || [])
       }
-    } catch (error) {
-      console.error('Error fetching recent events:', error)
-    } finally {
-      setEventsLoading(false)
+    } catch (err) {
+      console.error('Error fetching recent events:', err)
     }
   }
 
   const fetchTimelineStatus = async () => {
     try {
-      // Get current user for coach_id
       const user = getCurrentUser()
-      if (!user || !user.email) {
-        console.error('No user email available for timeline status')
-        return
-      }
+      if (!user?.email) return
 
-      const response = await fetch(`${apiBaseUrl}/events?action=timeline_status&coach_id=${user.email}`)
+      const response = await fetch(`${apiBaseUrl}/events?action=timeline_status`, {  // ✅ REMOVED: coach_id parameter
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
+
       if (response.ok) {
         const data = await response.json()
         setAutoDetectedStatuses(data.timeline_status || {})
-        console.log('Timeline status fetched:', data)
-      } else {
-        console.error('Failed to fetch timeline status:', response.statusText)
       }
-    } catch (error) {
-      console.error('Error fetching timeline status:', error)
+    } catch (err) {
+      console.error('Error fetching timeline status:', err)
     }
   }
 
   const fetchParentInvitations = async () => {
     try {
       setInvitationsLoading(true)
-      const response = await fetch(`${apiBaseUrl}/parent-invitations`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        console.error('Failed to fetch parent invitations')
+      const user = getCurrentUser()
+      if (!user?.email) {
+        console.error('No user email available for invitations')
         return
       }
 
+      const response = await fetch(`${apiBaseUrl}/parent-invitations`, {  // ✅ REMOVED: coach_id parameter
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
+
+      if (response.ok) {
       const data = await response.json()
       const invitations = data.invitations || []
-      setParentInvitations(invitations)
+        setParentInvitations(invitations.slice(0, 5))
       
       // Calculate stats
-      const total = invitations.length
-      const pending = invitations.filter((inv: ParentInvitation) => inv.status === 'pending').length
-      const accepted = invitations.filter((inv: ParentInvitation) => inv.status === 'accepted').length
-      
-      // Calculate week-over-week change (simplified for demo)
-      const weekAgo = new Date()
-      weekAgo.setDate(weekAgo.getDate() - 7)
-      const recentInvites = invitations.filter((inv: ParentInvitation) => 
-        new Date(inv.created_at) > weekAgo
-      ).length
+        const totalInvites = invitations.length
+        const pendingInvites = invitations.filter(inv => inv.status === 'pending').length
+        const acceptedInvites = invitations.filter(inv => inv.status === 'accepted').length
       
       setStats({
-        totalInvites: total,
-        pendingInvites: pending,
-        acceptedInvites: accepted,
-        weekChange: recentInvites > 0 ? `+${recentInvites}` : '0'
+          totalInvites,
+          pendingInvites,
+          acceptedInvites,
+          weekChange: '+0'  // TODO: Calculate actual week change
       })
-      
+      }
     } catch (err) {
       console.error('Error fetching parent invitations:', err)
     } finally {
@@ -244,14 +242,17 @@ export default function CoachDashboard() {
       setBookingsLoading(true)
       const user = getCurrentUser()
       if (!user?.email) {
-        console.error('No user email available for scheduling bookings')
+        console.error('No user email available for bookings')
         return
       }
 
       // TODO: Replace with real API endpoint when scheduling backend is implemented
       // Real implementation would be:
-      // const response = await fetch(`${apiBaseUrl}/scheduling/bookings?coach_id=${user.email}`, {
-      //   headers: { 'Content-Type': 'application/json' }
+      // const response = await fetch(`${apiBaseUrl}/scheduling/bookings`, {  // ✅ REMOVED: coach_id parameter
+      //   headers: { 
+      //     'Content-Type': 'application/json',
+      //     'Authorization': user.token ? `Bearer ${user.token}` : ''
+      //   }
       // })
       // const data = await response.json()
       // setSchedulingBookings(data.bookings || [])
@@ -281,8 +282,11 @@ export default function CoachDashboard() {
 
       // TODO: Replace with real API endpoint when applications backend is implemented
       // Real implementation would be:
-      // const response = await fetch(`${apiBaseUrl}/applications?coach_id=${user.email}&limit=5`, {
-      //   headers: { 'Content-Type': 'application/json' }
+      // const response = await fetch(`${apiBaseUrl}/applications`, {  // ✅ REMOVED: coach_id parameter
+      //   headers: { 
+      //     'Content-Type': 'application/json',
+      //     'Authorization': user.token ? `Bearer ${user.token}` : ''
+      //   }
       // })
       // const data = await response.json()
       // setApplications(data.applications || [])
@@ -360,6 +364,24 @@ export default function CoachDashboard() {
       setGreeting('Good afternoon, Coach')
     }
   }, [])
+
+  // Check for locked route redirects
+  useEffect(() => {
+    const locked = searchParams.get('locked')
+    const route = searchParams.get('route')
+    
+    if (locked === 'true' && route) {
+      setShowLockedNotification(true)
+      setLockedRoute(route)
+      
+      // Auto-hide notification after 10 seconds
+      const timer = setTimeout(() => {
+        setShowLockedNotification(false)
+      }, 10000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams])
 
   // Handle tour completion
   const handleTourComplete = () => {
@@ -501,6 +523,40 @@ export default function CoachDashboard() {
     <>
       {/* Onboarding Tour */}
       <CoachOnboardingTour run={showTour} onComplete={handleTourComplete} forceRestart={forceRestart} />
+      
+      {/* Locked Route Notification */}
+      {showLockedNotification && (
+        <div className="mb-6 rounded-lg bg-amber-50 border border-amber-200 p-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <LockClosedIcon className="h-5 w-5 text-amber-600" aria-hidden="true" />
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-amber-800">
+                Access Restricted
+              </h3>
+              <div className="mt-2 text-sm text-amber-700">
+                <p>
+                  The section you tried to access (<strong>{lockedRoute}</strong>) is currently locked. 
+                  This feature will be available soon as you progress through your school setup.
+                </p>
+              </div>
+            </div>
+            <div className="ml-auto pl-3">
+              <div className="-mx-1.5 -my-1.5">
+                <button
+                  type="button"
+                  className="inline-flex rounded-md bg-amber-50 p-1.5 text-amber-500 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:ring-offset-2 focus:ring-offset-amber-50"
+                  onClick={() => setShowLockedNotification(false)}
+                >
+                  <span className="sr-only">Dismiss</span>
+                  <XMarkIcon className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Dynamic Greeting that spans full width */}
       <div className="mb-8">

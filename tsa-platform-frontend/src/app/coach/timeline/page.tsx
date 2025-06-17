@@ -260,7 +260,12 @@ export default function TimelinePage() {
     if (!apiBaseUrl) return
 
     try {
-      const response = await fetch(`${apiBaseUrl}/events?action=timeline_status&coach_id=${coachEmail}`)
+      const response = await fetch(`${apiBaseUrl}/events?action=timeline_status`, {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': currentUser?.token ? `Bearer ${currentUser.token}` : ''
+        }
+      })
       if (response.ok) {
         const data = await response.json()
         setAutoDetectedStatuses(data.timeline_status || {})

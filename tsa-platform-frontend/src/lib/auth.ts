@@ -291,6 +291,15 @@ class CoachAuth {
           }))
         }
 
+        // Create server-side session for persistence
+        if (data.session_id) {
+          this.storeSessionId(data.session_id)
+        } else {
+          // If backend doesn't provide session_id yet, we can still create one client-side
+          const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          this.storeSessionId(sessionId)
+        }
+
         // Emit auth state change
         authEventEmitter.emit(this.getAuthState())
         
@@ -305,13 +314,17 @@ class CoachAuth {
   }
 
   /**
-   * Validate stored token with server
+   * Validate stored token with server and attempt session restoration
    */
   async validateStoredToken(): Promise<boolean> {
     if (typeof window === 'undefined') return false
 
     const token = this.getStoredToken('auth_token')
-    if (!token) return false
+    if (!token) {
+      // No local token - try session restoration
+      console.log('[COACH AUTH] No local token found, attempting session restoration...')
+      return await this.attemptSessionRestoration()
+    }
 
     try {
       const apiUrl = config.apiEndpoints.coach || config.apiEndpoints.passwordlessAuth
@@ -325,9 +338,10 @@ class CoachAuth {
       })
 
       if (response.status === 401 || response.status === 403) {
-        // Token is invalid, clear auth state
-        this.logout()
-        return false
+        // Token is invalid, try session restoration before giving up
+        console.log('[COACH AUTH] Token validation failed, attempting session restoration...')
+        this.clearInvalidTokens()
+        return await this.attemptSessionRestoration()
       }
 
       if (response.ok) {
@@ -338,9 +352,110 @@ class CoachAuth {
       return true
     } catch (error) {
       console.error('[COACH AUTH] Token validation error:', error)
-      // On network errors, assume token is still valid
-      return true
+      // On network errors, try session restoration as fallback
+      return await this.attemptSessionRestoration()
     }
+  }
+
+  /**
+   * Attempt to restore authentication from server-side session
+   */
+  async attemptSessionRestoration(): Promise<boolean> {
+    if (typeof window === 'undefined') return false
+
+    try {
+      const sessionId = this.getStoredSessionId()
+      if (!sessionId) {
+        console.log('[COACH AUTH] No session ID found for restoration')
+        return false
+      }
+
+      const apiUrl = config.apiEndpoints.coach || config.apiEndpoints.passwordlessAuth
+      
+      const response = await fetch(`${apiUrl}/auth/restore-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId
+        },
+        body: JSON.stringify({ session_id: sessionId })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        if (data.tokens && data.user) {
+          // Restore tokens from server session
+          this.storeTokens(data.tokens)
+          
+          // Store user info
+          if (data.user.role) {
+            localStorage.setItem('invitation_context', JSON.stringify({
+              user_role: data.user.role,
+              restored_at: new Date().toISOString()
+            }))
+          }
+
+          // Emit auth state change
+          authEventEmitter.emit(this.getAuthState())
+          
+          console.log('[COACH AUTH] ✅ Session restoration successful')
+          return true
+        }
+      } else if (response.status === 404) {
+        // Session not found or expired - clear session ID
+        this.clearStoredSessionId()
+        console.log('[COACH AUTH] Server session not found or expired')
+      }
+
+      return false
+    } catch (error) {
+      console.error('[COACH AUTH] Session restoration error:', error)
+      return false
+    }
+  }
+
+  /**
+   * Store session ID for server-side session management
+   */
+  storeSessionId(sessionId: string): void {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('tsa_session_id', sessionId)
+    
+    // Also store as cookie for automatic inclusion in requests
+    document.cookie = `tsa_session_id=${sessionId}; path=/; max-age=${30 * 24 * 60 * 60}; samesite=strict`
+  }
+
+  /**
+   * Get stored session ID
+   */
+  getStoredSessionId(): string | null {
+    if (typeof window === 'undefined') return null
+    
+    // Try localStorage first
+    const sessionId = localStorage.getItem('tsa_session_id')
+    if (sessionId) return sessionId
+    
+    // Try cookie as fallback
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+      const [key, value] = cookie.trim().split('=')
+      if (key === 'tsa_session_id') {
+        return value
+      }
+    }
+    
+    return null
+  }
+
+  /**
+   * Clear stored session ID
+   */
+  clearStoredSessionId(): void {
+    if (typeof window === 'undefined') return
+    
+    localStorage.removeItem('tsa_session_id')
+    document.cookie = 'tsa_session_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
   }
 
   /**
@@ -487,6 +602,9 @@ class CoachAuth {
   logout(): void {
     if (typeof window === 'undefined') return
     
+    // Attempt to invalidate server-side session
+    this.invalidateServerSession()
+    
     // Clear refresh timer
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer)
@@ -495,6 +613,7 @@ class CoachAuth {
     
     // Clear all auth data
     this.clearInvalidTokens()
+    this.clearStoredSessionId()
     
     // Emit auth state change
     authEventEmitter.emit({
@@ -503,6 +622,32 @@ class CoachAuth {
       roles: [],
       primaryRole: null
     })
+  }
+
+  /**
+   * Invalidate server-side session (fire-and-forget)
+   */
+  private async invalidateServerSession(): Promise<void> {
+    try {
+      const sessionId = this.getStoredSessionId()
+      if (!sessionId) return
+
+      const apiUrl = config.apiEndpoints.coach || config.apiEndpoints.passwordlessAuth
+      
+      // Fire-and-forget request to invalidate session
+      fetch(`${apiUrl}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId
+        },
+        body: JSON.stringify({ session_id: sessionId })
+      }).catch(() => {
+        // Ignore errors - this is best effort
+      })
+    } catch {
+      // Ignore errors - this is best effort
+    }
   }
 }
 

@@ -16,6 +16,12 @@ from .user_identifier import UserIdentifier
 # Import data models
 from .dynamodb_models import CoachProfile
 
+# Import authentication utilities
+from .auth_utils import extract_user_from_auth_token
+
+# Import profile sync utilities  
+from .profile_sync import ensure_profile_exists_for_email, create_profile_sync_manager
+
 # Create aliases for functions with different expected names
 create_api_response = create_response
 get_current_time = get_current_timestamp

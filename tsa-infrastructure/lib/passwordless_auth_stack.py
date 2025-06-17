@@ -202,7 +202,7 @@ class PasswordlessAuthStack(Stack):
                 "USER_POOL_ID": self.user_pool.user_pool_id,
                 "CLIENT_ID": self.user_pool_client.user_pool_client_id,
                 "MAGIC_LINKS_TABLE": self.magic_links_table.table_name,
-                "TSA_INVITATIONS_TABLE": self.table_config.get_table_name("invitations"),  # Coach invitations table
+                "TSA_INVITATIONS_TABLE": self.table_config.get_table_name("coach-invitations"),  # Coach invitations table
                 "PARENT_INVITATIONS_TABLE": self.table_config.get_table_name("parent-invitations"),  # Parent invitations table
                 "FRONTEND_URL": self.frontend_url,
                 "ADMIN_FRONTEND_URL": f"https://admin.{self.domain_name}" if self.stage == 'prod' else "http://localhost:3001",
@@ -276,8 +276,8 @@ class PasswordlessAuthStack(Stack):
             resources=[
                 self.magic_links_table.table_arn,
                 f"{self.magic_links_table.table_arn}/index/*",  # GSI permissions
-                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('invitations')}",  # Coach invitations table
-                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('invitations')}/index/*",  # Coach invitations GSI
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('coach-invitations')}",  # Coach invitations table
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('coach-invitations')}/index/*",  # Coach invitations GSI
                 f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('parent-invitations')}",  # Parent invitations table
                 f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('parent-invitations')}/index/*"  # Parent invitations GSI
             ]

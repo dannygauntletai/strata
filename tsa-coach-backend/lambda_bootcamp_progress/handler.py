@@ -12,6 +12,7 @@ from shared_utils import (
     UserIdentifier, CoachProfile, BootcampModule, BootcampProgress
 )
 
+# remove
 # Bootcamp module definitions - centralized configuration
 BOOTCAMP_MODULES = [
     BootcampModule({
@@ -100,20 +101,80 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return create_api_response(500, standardize_error_response(e, "lambda_handler"))
 
 
-def get_progress(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Get coach's bootcamp progress with proper ID mapping"""
+def extract_user_from_auth_token(event: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract user email from JWT auth token in Authorization header
+    Returns the authenticated user's email, or None if not authenticated
+    """
     try:
-        query_params = event.get('queryStringParameters') or {}
-        coach_id = query_params.get('coach_id')
+        headers = event.get('headers', {})
         
-        if not coach_id:
-            return create_api_response(400, {'error': 'Missing coach_id parameter'})
+        # Get authorization header (case-insensitive)
+        auth_header = None
+        for header_name, header_value in headers.items():
+            if header_name.lower() == 'authorization':
+                auth_header = header_value
+                break
+        
+        if not auth_header:
+            print("⚠️ No Authorization header found")
+            return None
+        
+        if not auth_header.startswith('Bearer '):
+            print("⚠️ Invalid Authorization header format")
+            return None
+        
+        # Extract JWT token
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        
+        # Decode JWT payload (basic validation - assumes token is already validated by API Gateway)
+        import base64
+        import json
+        
+        # Split token into parts
+        token_parts = token.split('.')
+        if len(token_parts) != 3:
+            print("⚠️ Invalid JWT token format")
+            return None
+        
+        # Decode payload (second part)
+        payload_b64 = token_parts[1]
+        # Add padding if necessary
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += '=' * padding
+        
+        payload = json.loads(base64.b64decode(payload_b64))
+        
+        # Extract email from token payload
+        email = payload.get('email') or payload.get('username')
+        if email:
+            print(f"✅ Authenticated user extracted from token: {email}")
+            return email.lower().strip()
+        
+        print("⚠️ No email found in token payload")
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error extracting user from auth token: {str(e)}")
+        return None
+
+
+def get_progress(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Get coach's bootcamp progress with proper authentication"""
+    try:
+        # Extract authenticated user from token - NO EMAIL PARAMETERS!
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_api_response(401, {'error': 'Authentication required'})
+        
+        print(f"🔐 Fetching bootcamp progress for authenticated user: {authenticated_email}")
         
         # Use centralized ID mapping - converts email to profile_id
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
         
         try:
-            normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
+            normalized_profile_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
         except ValueError as e:
             return create_api_response(404, {'error': str(e)})
         
@@ -122,7 +183,14 @@ def get_progress(event: Dict[str, Any]) -> Dict[str, Any]:
         if 'Item' not in response:
             return create_api_response(404, {'error': 'Coach profile not found'})
         
-        coach_profile = CoachProfile(response['Item'])
+        profile = response['Item']
+        
+        # Verify the profile belongs to the authenticated user (security check)
+        if profile.get('email', '').lower() != authenticated_email:
+            print(f"🚨 Security violation: Authenticated user {authenticated_email} tried to access profile {profile.get('email')}")
+            return create_api_response(403, {'error': 'Access denied'})
+        
+        coach_profile = CoachProfile(profile)
         
         # Get or create bootcamp progress
         bootcamp_progress_data = coach_profile.bootcamp_progress
@@ -171,19 +239,25 @@ def get_progress(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def start_module(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Start a module with proper validation"""
+    """Start a module with proper authentication validation"""
     try:
+        # Extract authenticated user from token
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_api_response(401, {'error': 'Authentication required'})
+        
         body = parse_event_body(event)
         
-        required_fields = ['coach_id', 'module_id']
+        # Only module_id is required from body now - coach_id comes from auth
+        required_fields = ['module_id']
         missing = [f for f in required_fields if f not in body or not body[f]]
         if missing:
             return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
-        # Normalize coach ID
+        # Normalize coach ID from authenticated user
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
         try:
-            normalized_profile_id = UserIdentifier.normalize_coach_id(body['coach_id'], profiles_table)
+            normalized_profile_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
         except ValueError as e:
             return create_api_response(404, {'error': str(e)})
         
@@ -216,19 +290,25 @@ def start_module(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def complete_video(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Complete a video module"""
+    """Complete a video module with proper authentication"""
     try:
+        # Extract authenticated user from token
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_api_response(401, {'error': 'Authentication required'})
+        
         body = parse_event_body(event)
         
-        required_fields = ['coach_id', 'module_id', 'watch_time']
+        # Only module_id and watch_time required - coach_id comes from auth
+        required_fields = ['module_id', 'watch_time']
         missing = [f for f in required_fields if f not in body or body[f] is None]
         if missing:
             return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
-        # Normalize coach ID
+        # Normalize coach ID from authenticated user
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
         try:
-            normalized_profile_id = UserIdentifier.normalize_coach_id(body['coach_id'], profiles_table)
+            normalized_profile_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
         except ValueError as e:
             return create_api_response(404, {'error': str(e)})
         
@@ -252,19 +332,25 @@ def complete_video(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def complete_quiz_module(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Complete a quiz module"""
+    """Complete a quiz module with proper authentication"""
     try:
+        # Extract authenticated user from token
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_api_response(401, {'error': 'Authentication required'})
+        
         body = parse_event_body(event)
         
-        required_fields = ['coach_id', 'module_id', 'score', 'percentage', 'passed']
+        # Only quiz-related fields required - coach_id comes from auth
+        required_fields = ['module_id', 'score', 'percentage', 'passed']
         missing = [f for f in required_fields if f not in body or body[f] is None]
         if missing:
             return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
-        # Normalize coach ID
+        # Normalize coach ID from authenticated user
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
         try:
-            normalized_profile_id = UserIdentifier.normalize_coach_id(body['coach_id'], profiles_table)
+            normalized_profile_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
         except ValueError as e:
             return create_api_response(404, {'error': str(e)})
         
@@ -292,19 +378,25 @@ def complete_quiz_module(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def save_video_progress(event: Dict[str, Any]) -> Dict[str, Any]:
-    """Save video watch progress"""
+    """Save video watch progress with proper authentication"""
     try:
+        # Extract authenticated user from token
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_api_response(401, {'error': 'Authentication required'})
+        
         body = parse_event_body(event)
         
-        required_fields = ['coach_id', 'module_id', 'current_time']
+        # Only module and time fields required - coach_id comes from auth
+        required_fields = ['module_id', 'current_time']
         missing = [f for f in required_fields if f not in body or body[f] is None]
         if missing:
             return create_api_response(400, {'error': f'Missing required fields: {", ".join(missing)}'})
         
-        # Normalize coach ID
+        # Normalize coach ID from authenticated user
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
         try:
-            normalized_profile_id = UserIdentifier.normalize_coach_id(body['coach_id'], profiles_table)
+            normalized_profile_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
         except ValueError as e:
             return create_api_response(404, {'error': str(e)})
         

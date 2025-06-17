@@ -8,6 +8,12 @@ import boto3
 import sys
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
+import logging
+from botocore.exceptions import ClientError
+
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # Add shared layer to path
 sys.path.append('/opt/python')
@@ -19,11 +25,14 @@ from shared_utils import (
     get_table_name,
     parse_event_body,
     standardize_error_response,
-    get_current_timestamp
+    get_current_timestamp,
 )
+from auth_utils import extract_user_from_auth_token
 # CoachProfile import removed - not used in this handler
 from user_identifier import UserIdentifier
 
+# Environment variables
+PROFILES_TABLE = os.environ.get('PROFILES_TABLE')
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for coach profile operations"""
@@ -31,90 +40,97 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         method = event.get('httpMethod', 'GET')
         path = event.get('path', '')
         
-        # Extract coach_id from path or query parameters
-        path_params = event.get('pathParameters') or {}
-        query_params = event.get('queryStringParameters') or {}
+        logger.info(f"Processing {method} request to {path}")
         
         if path.endswith('/profile') and method == 'GET':
-            return get_coach_profile(query_params)
+            return get_coach_profile(event)
         elif path.endswith('/profile') and method == 'PATCH':
             return update_coach_profile(event)
         elif path.endswith('/profile/preferences') and method == 'PATCH':
             return update_coach_preferences(event)
         elif path.endswith('/health') and method == 'GET':
-            return create_response(200, {'status': 'healthy', 'service': 'coach-profile'})
+            return health_check()
         else:
             return create_response(404, {'error': 'Endpoint not found'})
             
     except Exception as e:
-        print(f"Lambda handler error: {str(e)}")
+        logger.error(f"Unexpected error in lambda_handler: {str(e)}")
         return create_response(500, standardize_error_response(e, "lambda_handler"))
 
+def health_check() -> dict:
+    """Health check endpoint"""
+    return create_response(200, {'status': 'healthy', 'service': 'coach-profile'})
 
-def get_coach_profile(query_params: Dict[str, Any]) -> Dict[str, Any]:
+def get_coach_profile(event: Dict[str, Any]) -> Dict[str, Any]:
     """Get coach profile including preferences and tour completion status"""
     try:
-        coach_id = query_params.get('coach_id')
-        email = query_params.get('email')
+        # 🔧 HARDENED: Extract user with profile sync fallback
+        email = extract_user_from_auth_token(event)
+        if not email:
+            return create_response(401, {'error': 'Authentication required'})
         
-        if not coach_id and not email:
-            return create_response(400, {'error': 'coach_id or email parameter required'})
+        logger.info(f"🔐 Fetching profile for authenticated user: {email}")
         
-        # Use centralized ID mapping
-        profiles_table = get_dynamodb_table(get_table_name('profiles'))
+        # Get profile from profiles table  
+        dynamodb = boto3.resource('dynamodb')
+        profiles_table = dynamodb.Table(PROFILES_TABLE)
         
-        try:
-            if coach_id:
-                normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
-            else:
-                normalized_profile_id = UserIdentifier.normalize_coach_id(email, profiles_table)
-        except ValueError as e:
-            return create_response(404, {'error': str(e)})
+        # Generate consistent coach_id
+        coach_id = f"coach_{email.replace('@', '_').replace('.', '_')}"
         
-        # Get coach profile
-        response = profiles_table.get_item(Key={'profile_id': normalized_profile_id})
+        response = profiles_table.get_item(
+            Key={'profile_id': coach_id}
+        )
+        
         if 'Item' not in response:
+            logger.error(f"Profile not found for {email} (coach_id: {coach_id})")
             return create_response(404, {'error': 'Coach profile not found'})
         
         profile = response['Item']
         
-        # Structure response with preferences
+        # Convert DynamoDB types to JSON serializable
         profile_data = {
-            'profile_id': profile.get('profile_id'),
-            'email': profile.get('email'),
-            'first_name': profile.get('first_name'),
-            'last_name': profile.get('last_name'),
-            'school_name': profile.get('school_name'),
-            'role_type': profile.get('role_type', 'coach'),
+            'coach_id': profile.get('coach_id', coach_id),
+            'profile_id': profile.get('profile_id', coach_id),
+            'school_id': profile.get('school_id', ''),
+            'first_name': profile.get('first_name', ''),
+            'last_name': profile.get('last_name', ''),
+            'email': profile.get('email', email),
+            'phone': profile.get('phone', ''),
+            'specializations': profile.get('specializations', []),
+            'certification_level': profile.get('certification_level', ''),
+            'years_experience': int(profile.get('years_experience', 0)),
+            'students_assigned': profile.get('students_assigned', []),
+            'active_programs': profile.get('active_programs', []),
             'preferences': profile.get('preferences', {}),
-            'dashboard_tour_completed': profile.get('dashboard_tour_completed', False),
-            'dashboard_tour_completed_at': profile.get('dashboard_tour_completed_at'),
-            'onboarding_completed': profile.get('onboarding_completed', False),
-            'created_at': profile.get('created_at'),
-            'updated_at': profile.get('updated_at')
+            'created_at': profile.get('created_at', ''),
+            'updated_at': profile.get('updated_at', ''),
+            'sync_source': profile.get('sync_source')  # Include sync metadata
         }
         
+        logger.info(f"Successfully retrieved profile for {email}")
         return create_response(200, {'profile': profile_data})
         
     except Exception as e:
-        print(f"💥 Error getting coach profile: {str(e)}")
+        logger.error(f"💥 Error getting coach profile: {str(e)}")
         return create_response(500, standardize_error_response(e, "get_coach_profile"))
 
 
 def update_coach_profile(event: Dict[str, Any]) -> Dict[str, Any]:
     """Update basic coach profile information"""
     try:
+        # Extract authenticated user from token
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_response(401, {'error': 'Authentication required'})
+        
         body = parse_event_body(event)
         
-        coach_id = body.get('coach_id') or body.get('email')
-        if not coach_id:
-            return create_response(400, {'error': 'coach_id or email required'})
-        
-        # Use centralized ID mapping
+        # Use centralized ID mapping with authenticated user
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
         
         try:
-            normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
+            normalized_profile_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
         except ValueError as e:
             return create_response(404, {'error': str(e)})
         
@@ -122,6 +138,12 @@ def update_coach_profile(event: Dict[str, Any]) -> Dict[str, Any]:
         response = profiles_table.get_item(Key={'profile_id': normalized_profile_id})
         if 'Item' not in response:
             return create_response(404, {'error': 'Coach profile not found'})
+        
+        profile = response['Item']
+        
+        # Verify ownership (security check)
+        if profile.get('email', '').lower() != authenticated_email:
+            return create_response(403, {'error': 'Access denied'})
         
         # Build update expression for allowed fields
         update_expression = "SET updated_at = :timestamp"
@@ -167,24 +189,25 @@ def update_coach_profile(event: Dict[str, Any]) -> Dict[str, Any]:
         })
         
     except Exception as e:
-        print(f"💥 Error updating coach profile: {str(e)}")
+        logger.error(f"💥 Error updating coach profile: {str(e)}")
         return create_response(500, standardize_error_response(e, "update_coach_profile"))
 
 
 def update_coach_preferences(event: Dict[str, Any]) -> Dict[str, Any]:
     """Update coach preferences including tour completion status"""
     try:
+        # Extract authenticated user from token
+        authenticated_email = extract_user_from_auth_token(event)
+        if not authenticated_email:
+            return create_response(401, {'error': 'Authentication required'})
+        
         body = parse_event_body(event)
         
-        coach_id = body.get('coach_id') or body.get('email')
-        if not coach_id:
-            return create_response(400, {'error': 'coach_id or email required'})
-        
-        # Use centralized ID mapping
+        # Use centralized ID mapping with authenticated user
         profiles_table = get_dynamodb_table(get_table_name('profiles'))
         
         try:
-            normalized_profile_id = UserIdentifier.normalize_coach_id(coach_id, profiles_table)
+            normalized_profile_id = UserIdentifier.normalize_coach_id(authenticated_email, profiles_table)
         except ValueError as e:
             return create_response(404, {'error': str(e)})
         
@@ -194,6 +217,10 @@ def update_coach_preferences(event: Dict[str, Any]) -> Dict[str, Any]:
             return create_response(404, {'error': 'Coach profile not found'})
         
         existing_profile = response['Item']
+        
+        # Verify ownership (security check)
+        if existing_profile.get('email', '').lower() != authenticated_email:
+            return create_response(403, {'error': 'Access denied'})
         
         # Build update expression
         update_expression = "SET updated_at = :timestamp"
@@ -238,5 +265,5 @@ def update_coach_preferences(event: Dict[str, Any]) -> Dict[str, Any]:
         })
         
     except Exception as e:
-        print(f"💥 Error updating coach preferences: {str(e)}")
+        logger.error(f"💥 Error updating coach preferences: {str(e)}")
         return create_response(500, standardize_error_response(e, "update_coach_preferences")) 

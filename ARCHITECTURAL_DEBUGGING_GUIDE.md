@@ -832,4 +832,299 @@ def test_all_api_routes():
 - Verify API Gateway route configuration matches frontend expectations
 - Complete service functionality before deployment
 
+### **🎯 SUCCESSFUL RESOLUTION: Lambda CORS Headers Issue**
+
+**🔄 Plot Twist**: After implementing the above solution, we discovered the **real** root cause was different!
+
+#### **Actual Root Cause Analysis**
+```bash
+# ✅ Step 1: Endpoint EXISTS and works
+curl -X GET "https://h6wgy6f3r4.execute-api.us-east-2.amazonaws.com/dev/parent-invitations"
+# Returns: HTTP 200 with data ✅
+
+# ✅ Step 2: OPTIONS preflight works  
+curl -X OPTIONS "https://h6wgy6f3r4.execute-api.us-east-2.amazonaws.com/dev/parent-invitations"
+# Returns: HTTP 204 with CORS headers ✅
+
+# ❌ Step 3: Lambda response missing CORS headers
+# Browser gets: "No 'Access-Control-Allow-Origin' header" in actual GET response
+```
+
+#### **Real Issue: Lambda Function Response Architecture**
+
+**Problem**: The invitations Lambda function used `create_api_response()` which doesn't include CORS headers:
+
+```python
+# ❌ BEFORE: No CORS headers in Lambda response
+from shared_utils import create_api_response  # This function has NO CORS headers
+
+def list_parent_invitations(event):
+    # ... business logic ...
+    return create_api_response(200, {'invitations': data})
+    # Returns: {"statusCode": 200, "headers": {"Content-Type": "application/json"}, "body": "..."}
+    # ❌ Missing CORS headers!
+```
+
+**Root Cause**: The TSA shared layer has two response functions:
+- `create_api_response()` - **No CORS headers** (used by invitations handler)
+- `create_cors_response()` - **With CORS headers** (used by other handlers)
+
+#### **Architectural Fix Applied**
+
+```python
+# ✅ AFTER: Added proper CORS response function
+def create_cors_response(status_code: int, body: dict) -> dict:
+    """Create standardized response with proper CORS headers"""
+    return {
+        "statusCode": status_code,
+        "headers": {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD",
+            "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Requested-With,Accept,Accept-Language,Cache-Control",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600",
+            "Content-Type": "application/json"
+        },
+        "body": json.dumps(body, default=str)
+    }
+
+# ✅ Replace ALL create_api_response calls with create_cors_response
+def list_parent_invitations(event):
+    # ... business logic ...
+    return create_cors_response(200, {'invitations': data})  # ✅ Now includes CORS headers
+```
+
+#### **Key Architectural Pattern Discovery**
+
+**API Gateway + Lambda CORS Handling:**
+- **API Gateway**: Handles OPTIONS preflight requests (via `default_cors_preflight_options`)
+- **Lambda Function**: Must return CORS headers in actual HTTP responses
+
+**Both are required for full CORS support!**
+
+#### **Testing Results**
+
+**✅ BEFORE Fix:**
+```bash
+# OPTIONS request works
+curl -X OPTIONS ".../parent-invitations" -H "Origin: http://localhost:3000"
+# Returns: access-control-allow-origin: http://localhost:3000 ✅
+
+# GET request missing CORS
+curl -X GET ".../parent-invitations" -H "Origin: http://localhost:3000"  
+# Returns: NO access-control-allow-origin header ❌
+```
+
+**✅ AFTER Fix:**
+```bash
+# GET request now includes CORS
+curl -X GET ".../parent-invitations" -H "Origin: http://localhost:3000"
+# Returns: access-control-allow-origin: * ✅
+#          access-control-allow-credentials: true ✅ 
+#          access-control-allow-methods: GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD ✅
+```
+
+#### **Final Resolution Summary**
+
+| Issue Type | Status | Solution Applied |
+|------------|--------|------------------|
+| **Missing Endpoint** | ✅ False alarm | Endpoint existed and functioned correctly |
+| **API Gateway CORS** | ✅ Working | Preflight OPTIONS requests handled properly |
+| **Lambda CORS Headers** | ❌→✅ **Fixed** | **Replaced `create_api_response` with `create_cors_response`** |
+
+#### **Deployment Success**
+```bash
+✅ tsa-coach-backend-dev deployed successfully
+✅ CORS headers now included in all Lambda responses
+✅ Frontend can access parent-invitations endpoint without CORS errors
+```
+
+### **🔑 Key Architectural Lessons**
+
+1. **CORS has two layers in API Gateway + Lambda:**
+   - API Gateway handles preflight OPTIONS
+   - Lambda must return CORS headers in responses
+
+2. **Test methodology for CORS issues:**
+   ```bash
+   # Step 1: Test endpoint exists
+   curl -X GET endpoint-url  # Should return 200, not 404
+   
+   # Step 2: Test preflight works  
+   curl -X OPTIONS endpoint-url -H "Origin: origin"  # Should return CORS headers
+   
+   # Step 3: Test actual request CORS
+   curl -X GET endpoint-url -H "Origin: origin"  # Should return CORS headers
+   ```
+
+3. **Code review pattern for Lambda functions:**
+   - **Red flag**: `create_api_response()` without CORS
+   - **Green flag**: `create_cors_response()` with proper headers
+   - **Best practice**: Consistent response patterns across all handlers
+
+4. **Shared utility consistency:**
+   - Audit all Lambda functions for response function usage
+   - Standardize on CORS-enabled response patterns
+   - Document which utilities include CORS vs. those that don't
+
+### **Prevention Strategy**
+```python
+# Code review checklist
+def validate_lambda_response_patterns():
+    """Ensure all Lambda handlers use CORS-enabled responses"""
+    forbidden_patterns = [
+        "create_api_response(",  # ❌ No CORS
+        "return {'statusCode':",  # ❌ Manual response without CORS
+    ]
+    
+    required_patterns = [
+        "create_cors_response(",  # ✅ CORS enabled
+        "Access-Control-Allow-Origin",  # ✅ Manual CORS headers
+    ]
+```
+
+**This case demonstrates the critical importance of end-to-end CORS testing, not just API Gateway configuration verification.**
+
+---
+
+## 🎯 **Case Study: Parent Invitation Type Confusion - Architectural Separation**
+
+### **Problem Classification**
+**🔴 Architectural Issue**: "Conflating Different Business Domain Objects"
+
+### **Initial Symptom**
+```javascript
+// Frontend error - wrong endpoint data structure
+POST https://h6wgy6f3r4.execute-api.us-east-2.amazonaws.com/dev/parent-invitations 400 (Bad Request)
+Failed to create invitation: Missing required fields: event_id, invitee_email, inviter_id
+```
+
+### **Root Cause Analysis**
+The user correctly identified that there should be **two distinct types of parent invitations**:
+
+1. **Parent Platform Invitations** - Coach invites parents to join the platform for ongoing enrollment
+2. **Event Invitations** - Coach invites specific participants to specific events
+
+However, the system was routing both types to the same handler, causing architectural confusion.
+
+### **❌ Wrong Approach (Forcing Single Handler)**
+```python
+# WRONG: Try to handle both types in one function
+def create_invitation(event):
+    if 'event_id' in body:
+        # Handle event invitations
+    else:
+        # Handle platform invitations
+```
+
+**Why this was wrong:**
+- **Violates single responsibility**: One function trying to handle two different business domains
+- **Complex conditional logic**: Makes the code harder to maintain and test
+- **Data structure conflicts**: Different required fields for different use cases
+
+### **✅ Right Approach (Architectural Separation)**
+
+#### **Step 1: Fix Lambda Routing Logic**
+```python
+# ✅ FIXED: Proper routing based on path
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Main handler - routes between parent platform invitations and event invitations"""
+    
+    if http_method == 'POST':
+        if '/parent-invitations' in path:
+            # Parent platform invitations (coach to parent for enrollment)
+            return create_parent_invitation(event)
+        else:
+            # Event invitations (coach to parent/student for specific events)
+            return create_invitation(event)
+```
+
+#### **Step 2: Clear Frontend Separation**
+```javascript
+// ✅ Students Page - Platform Invitations
+const invitationData = {
+  parent_email: "parent@example.com",
+  coach_id: "coach-profile-id", 
+  student_first_name: "Student",
+  student_last_name: "Name",
+  grade_level: "5th",
+  message: "Welcome to TSA!"
+}
+
+// ✅ Events Page - Event Invitations  
+const invitationData = {
+  event_id: "event-uuid",
+  invitee_email: "participant@example.com",
+  invitee_name: "John Smith",
+  inviter_id: "coach-email",
+  message: "Join us for this event!"
+}
+```
+
+#### **Step 3: Frontend UI Clarity**
+```javascript
+// ✅ Students page updated with clear messaging
+<Heading>Parent Platform Invitations</Heading>
+<p>Invite parents to join your coaching platform for ongoing enrollment.</p>
+<span className="text-amber-600">
+  💡 For event-specific invitations, use the Events page → individual event → "Invite Participants"
+</span>
+
+// ✅ Events page with dedicated invitation modal
+<Button onClick={() => setShowInviteModal(true)}>
+  <PaperAirplaneIcon className="w-4 h-4" />
+  Invite Participants
+</Button>
+```
+
+### **Final Architecture**
+
+| Type | Location | Purpose | Endpoint | Data Structure |
+|------|----------|---------|----------|----------------|
+| **Platform Invitations** | `/coach/students` | Ongoing platform enrollment | `POST /parent-invitations` | `parent_email`, `coach_id`, `student_info` |
+| **Event Invitations** | `/coach/events/[id]` | Specific event participation | `POST /invitations` | `event_id`, `invitee_email`, `inviter_id` |
+
+### **Key Architectural Lessons**
+
+1. **Domain Separation**: Different business objects should have different handlers and data structures
+2. **Route Clarity**: API paths should clearly indicate the domain (`/parent-invitations` vs `/invitations`)
+3. **Frontend Organization**: Different use cases should be handled in appropriate UI contexts
+4. **User Education**: Clear UI messaging helps users understand when to use which feature
+
+### **Prevention Strategy**
+```python
+# Code review checklist for business domain separation
+def validate_domain_boundaries():
+    """Ensure business domains are properly separated"""
+    questions = [
+        "Are we handling multiple business domains in one function?",
+        "Do the data structures have different required fields?", 
+        "Could this be split into separate, focused handlers?",
+        "Is the UI context appropriate for this functionality?"
+    ]
+```
+
+### **✅ SUCCESSFUL RESOLUTION**
+
+**Problem**: Parent invitation requests were being routed to event invitation handler
+
+**Root Cause**: Lambda routing logic was checking for `/parents` instead of `/parent-invitations`
+
+**Architectural Solution Applied**:
+1. **Fixed routing logic** to properly distinguish `/parent-invitations` vs `/invitations`
+2. **Separated frontend functionality** between students page and events page
+3. **Added clear UI messaging** to guide users to the appropriate feature
+4. **Implemented proper data structures** for each invitation type
+
+**Result**: 
+- ✅ Parent platform invitations work correctly from students page
+- ✅ Event invitations work correctly from individual event pages
+- ✅ Clear separation of concerns and user experience
+- ✅ Proper architectural boundaries between business domains
+
+**Key Architectural Lesson**: **"When users say there should be two types, listen and create proper separation"**
+- Different business domains need different handlers
+- Route clarity prevents confusion and routing errors
+- UI context matters for user experience and functionality discovery
+
 --- 

@@ -1,0 +1,21 @@
+{
+  "version": "44.0.0",
+  "files": {
+    "f1da750b3e9bd97d60e0a562569ddddd765d066f4813353272ba21d5231cab88": {
+      "displayName": "tsa-infra-networking-dev Template",
+      "source": {
+        "path": "tsa-infra-networking-dev.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "f1da750b3e9bd97d60e0a562569ddddd765d066f4813353272ba21d5231cab88.json",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

@@ -1,0 +1,21 @@
+{
+  "version": "44.0.0",
+  "files": {
+    "2428b3038c8a2e822d7d971ad74664ae3a5dd54ec6b54f9b4406406863c259ca": {
+      "displayName": "tsa-infra-security-dev Template",
+      "source": {
+        "path": "tsa-infra-security-dev.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "2428b3038c8a2e822d7d971ad74664ae3a5dd54ec6b54f9b4406406863c259ca.json",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

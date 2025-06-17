@@ -1,0 +1,1334 @@
+{
+ "Description": "Data storage for TSA Unified Platform (dev)",
+ "Resources": {
+  "UnifiedPlatformKey296E14F6": {
+   "Type": "AWS::KMS::Key",
+   "Properties": {
+    "Description": "KMS key for TSA Unified Platform dev encryption",
+    "EnableKeyRotation": true,
+    "KeyPolicy": {
+     "Statement": [
+      {
+       "Action": "kms:*",
+       "Effect": "Allow",
+       "Principal": {
+        "AWS": {
+         "Fn::Join": [
+          "",
+          [
+           "arn:aws:iam::",
+           {
+            "Ref": "AWS::AccountId"
+           },
+           ":root"
+          ]
+         ]
+        }
+       },
+       "Resource": "*"
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/UnifiedPlatformKey/Resource"
+   }
+  },
+  "DatabaseSecret86DBB7B3": {
+   "Type": "AWS::SecretsManager::Secret",
+   "Properties": {
+    "Description": "PostgreSQL database credentials for unified platform",
+    "GenerateSecretString": {
+     "ExcludeCharacters": "\"/@ \\'\"",
+     "GenerateStringKey": "password",
+     "PasswordLength": 16,
+     "SecretStringTemplate": "{\"username\":\"postgres\"}"
+    },
+    "Name": "tsa/database-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/DatabaseSecret/Resource"
+   }
+  },
+  "DatabaseSecretAttachment9A63A3D4": {
+   "Type": "AWS::SecretsManager::SecretTargetAttachment",
+   "Properties": {
+    "SecretId": {
+     "Ref": "DatabaseSecret86DBB7B3"
+    },
+    "TargetId": {
+     "Ref": "UnifiedPlatformDatabase0624511C"
+    },
+    "TargetType": "AWS::RDS::DBInstance"
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/DatabaseSecret/Attachment/Resource"
+   }
+  },
+  "UnifiedPlatformDBSubnetGroup": {
+   "Type": "AWS::RDS::DBSubnetGroup",
+   "Properties": {
+    "DBSubnetGroupDescription": "Subnet group for unified platform PostgreSQL database",
+    "SubnetIds": [
+     {
+      "Fn::ImportValue": "tsa-infra-networking-dev:ExportsOutputRefTsaUnifiedPlatformVPCDatabaseSubnet1Subnet90078AB3D93DFB88"
+     },
+     {
+      "Fn::ImportValue": "tsa-infra-networking-dev:ExportsOutputRefTsaUnifiedPlatformVPCDatabaseSubnet2Subnet0B8A106F58EA45A0"
+     }
+    ],
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/UnifiedPlatformDBSubnetGroup/Default"
+   }
+  },
+  "UnifiedPlatformDatabase0624511C": {
+   "Type": "AWS::RDS::DBInstance",
+   "Properties": {
+    "AllocatedStorage": "100",
+    "BackupRetentionPeriod": 1,
+    "CopyTagsToSnapshot": true,
+    "DBInstanceClass": "db.t3.micro",
+    "DBInstanceIdentifier": "tsa-unified-platform-dev",
+    "DBName": "unified_platform",
+    "DBSubnetGroupName": {
+     "Ref": "UnifiedPlatformDBSubnetGroup"
+    },
+    "DeleteAutomatedBackups": true,
+    "DeletionProtection": false,
+    "EnablePerformanceInsights": false,
+    "Engine": "postgres",
+    "EngineVersion": "14.13",
+    "KmsKeyId": {
+     "Fn::GetAtt": [
+      "UnifiedPlatformKey296E14F6",
+      "Arn"
+     ]
+    },
+    "MasterUserPassword": {
+     "Fn::Join": [
+      "",
+      [
+       "{{resolve:secretsmanager:",
+       {
+        "Ref": "DatabaseSecret86DBB7B3"
+       },
+       ":SecretString:password::}}"
+      ]
+     ]
+    },
+    "MasterUsername": {
+     "Fn::Join": [
+      "",
+      [
+       "{{resolve:secretsmanager:",
+       {
+        "Ref": "DatabaseSecret86DBB7B3"
+       },
+       ":SecretString:username::}}"
+      ]
+     ]
+    },
+    "StorageEncrypted": true,
+    "StorageType": "gp2",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ],
+    "VPCSecurityGroups": [
+     {
+      "Fn::ImportValue": "tsa-infra-networking-dev:ExportsOutputFnGetAttUnifiedPlatformDatabaseSG3143326CGroupIdDAAFD56C"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/UnifiedPlatformDatabase/Resource"
+   }
+  },
+  "UnifiedPlatformBucket8310CA66": {
+   "Type": "AWS::S3::Bucket",
+   "Properties": {
+    "BucketEncryption": {
+     "ServerSideEncryptionConfiguration": [
+      {
+       "ServerSideEncryptionByDefault": {
+        "KMSMasterKeyID": {
+         "Fn::GetAtt": [
+          "UnifiedPlatformKey296E14F6",
+          "Arn"
+         ]
+        },
+        "SSEAlgorithm": "aws:kms"
+       }
+      }
+     ]
+    },
+    "BucketName": {
+     "Fn::Join": [
+      "",
+      [
+       "tsa-unified-platform-assets-dev-",
+       {
+        "Ref": "AWS::AccountId"
+       }
+      ]
+     ]
+    },
+    "LifecycleConfiguration": {
+     "Rules": [
+      {
+       "Id": "unified-platform-lifecycle",
+       "Status": "Enabled",
+       "Transitions": [
+        {
+         "StorageClass": "STANDARD_IA",
+         "TransitionInDays": 30
+        },
+        {
+         "StorageClass": "GLACIER",
+         "TransitionInDays": 90
+        }
+       ]
+      }
+     ]
+    },
+    "PublicAccessBlockConfiguration": {
+     "BlockPublicAcls": true,
+     "BlockPublicPolicy": true,
+     "IgnorePublicAcls": true,
+     "RestrictPublicBuckets": true
+    },
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ],
+    "VersioningConfiguration": {
+     "Status": "Enabled"
+    }
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/UnifiedPlatformBucket/Resource"
+   }
+  },
+  "EventsPhotosBucket48ACC295": {
+   "Type": "AWS::S3::Bucket",
+   "Properties": {
+    "BucketEncryption": {
+     "ServerSideEncryptionConfiguration": [
+      {
+       "ServerSideEncryptionByDefault": {
+        "KMSMasterKeyID": {
+         "Fn::GetAtt": [
+          "UnifiedPlatformKey296E14F6",
+          "Arn"
+         ]
+        },
+        "SSEAlgorithm": "aws:kms"
+       }
+      }
+     ]
+    },
+    "BucketName": {
+     "Fn::Join": [
+      "",
+      [
+       "tsa-events-photos-storage-dev-",
+       {
+        "Ref": "AWS::AccountId"
+       }
+      ]
+     ]
+    },
+    "CorsConfiguration": {
+     "CorsRules": [
+      {
+       "AllowedHeaders": [
+        "*"
+       ],
+       "AllowedMethods": [
+        "GET",
+        "POST"
+       ],
+       "AllowedOrigins": [
+        "*"
+       ],
+       "MaxAge": 3600
+      }
+     ]
+    },
+    "LifecycleConfiguration": {
+     "Rules": [
+      {
+       "Id": "events-photos-lifecycle",
+       "Status": "Enabled",
+       "Transitions": [
+        {
+         "StorageClass": "STANDARD_IA",
+         "TransitionInDays": 90
+        },
+        {
+         "StorageClass": "GLACIER",
+         "TransitionInDays": 365
+        }
+       ]
+      }
+     ]
+    },
+    "PublicAccessBlockConfiguration": {
+     "BlockPublicAcls": false,
+     "BlockPublicPolicy": false,
+     "IgnorePublicAcls": false,
+     "RestrictPublicBuckets": false
+    },
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/EventsPhotosBucket/Resource"
+   }
+  },
+  "EventsPhotosBucketPolicyF95A2BBF": {
+   "Type": "AWS::S3::BucketPolicy",
+   "Properties": {
+    "Bucket": {
+     "Ref": "EventsPhotosBucket48ACC295"
+    },
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": "s3:GetObject",
+       "Effect": "Allow",
+       "Principal": {
+        "AWS": "*"
+       },
+       "Resource": {
+        "Fn::Join": [
+         "",
+         [
+          {
+           "Fn::GetAtt": [
+            "EventsPhotosBucket48ACC295",
+            "Arn"
+           ]
+          },
+          "/*"
+         ]
+        ]
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/EventsPhotosBucket/Policy/Resource"
+   }
+  },
+  "UsersTable9725E9C8": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "user_id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+     {
+      "AttributeName": "user_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "PointInTimeRecoverySpecification": {
+     "PointInTimeRecoveryEnabled": true
+    },
+    "TableName": "users-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/UsersTable/Resource"
+   }
+  },
+  "ProfilesTable3B48B4C6": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "profile_id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+     {
+      "AttributeName": "profile_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "PointInTimeRecoverySpecification": {
+     "PointInTimeRecoveryEnabled": true
+    },
+    "TableName": "profiles-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/ProfilesTable/Resource"
+   }
+  },
+  "OrganizationsTable01047E98": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "org_id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+     {
+      "AttributeName": "org_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "TableName": "organizations-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/OrganizationsTable/Resource"
+   }
+  },
+  "InvitationsTable86405099": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "invitation_id",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "email",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "GlobalSecondaryIndexes": [
+     {
+      "IndexName": "email-index",
+      "KeySchema": [
+       {
+        "AttributeName": "email",
+        "KeyType": "HASH"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     }
+    ],
+    "KeySchema": [
+     {
+      "AttributeName": "invitation_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "TableName": "invitations-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ],
+    "TimeToLiveSpecification": {
+     "AttributeName": "expires_at",
+     "Enabled": true
+    }
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/InvitationsTable/Resource"
+   }
+  },
+  "EnrollmentsTableE11B64C8": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "enrollment_id",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "parent_email",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "GlobalSecondaryIndexes": [
+     {
+      "IndexName": "parent-email-index",
+      "KeySchema": [
+       {
+        "AttributeName": "parent_email",
+        "KeyType": "HASH"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     }
+    ],
+    "KeySchema": [
+     {
+      "AttributeName": "enrollment_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "PointInTimeRecoverySpecification": {
+     "PointInTimeRecoveryEnabled": true
+    },
+    "TableName": "enrollments-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/EnrollmentsTable/Resource"
+   }
+  },
+  "EventsTableD24865E5": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "event_id",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "coach_id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "GlobalSecondaryIndexes": [
+     {
+      "IndexName": "coach-events-index",
+      "KeySchema": [
+       {
+        "AttributeName": "coach_id",
+        "KeyType": "HASH"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     }
+    ],
+    "KeySchema": [
+     {
+      "AttributeName": "event_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "PointInTimeRecoverySpecification": {
+     "PointInTimeRecoveryEnabled": true
+    },
+    "TableName": "events-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/EventsTable/Resource"
+   }
+  },
+  "EventRegistrationsTable27CA2592": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "registration_id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+     {
+      "AttributeName": "registration_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "TableName": "event-registrations-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/EventRegistrationsTable/Resource"
+   }
+  },
+  "DocumentsTable7E808EE5": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "document_id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+     {
+      "AttributeName": "document_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "PointInTimeRecoverySpecification": {
+     "PointInTimeRecoveryEnabled": true
+    },
+    "TableName": "documents-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/DocumentsTable/Resource"
+   }
+  },
+  "SchedulingTable1EC09B43": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "schedule_id",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "enrollment_id",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "coach_id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "GlobalSecondaryIndexes": [
+     {
+      "IndexName": "enrollment-id-index",
+      "KeySchema": [
+       {
+        "AttributeName": "enrollment_id",
+        "KeyType": "HASH"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     },
+     {
+      "IndexName": "coach-id-index",
+      "KeySchema": [
+       {
+        "AttributeName": "coach_id",
+        "KeyType": "HASH"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     }
+    ],
+    "KeySchema": [
+     {
+      "AttributeName": "schedule_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "PointInTimeRecoverySpecification": {
+     "PointInTimeRecoveryEnabled": true
+    },
+    "TableName": "scheduling-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/SchedulingTable/Resource"
+   }
+  },
+  "AnalyticsEventsTable43E34F03": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "PK",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "SK",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+     {
+      "AttributeName": "PK",
+      "KeyType": "HASH"
+     },
+     {
+      "AttributeName": "SK",
+      "KeyType": "RANGE"
+     }
+    ],
+    "TableName": "analytics-events-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/AnalyticsEventsTable/Resource"
+   }
+  },
+  "SessionsTable7C302024": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "session_id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+     {
+      "AttributeName": "session_id",
+      "KeyType": "HASH"
+     }
+    ],
+    "TableName": "sessions-dev",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ],
+    "TimeToLiveSpecification": {
+     "AttributeName": "expires_at",
+     "Enabled": true
+    }
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/SessionsTable/Resource"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/11Py47CMAz8Fu5poHDYMw8JoT0sAu7ITQ2ENg5KHK2qKv9OaEAgTvPwyB5P5XQykeUI/n2h6qZodSX7PYNqRLKOfWO87H+xE8sTJYjCo3LI3gDBGV3KDvoxfrIMB3Bn5DmnTReD9BH4nkTh6nRjHypCXjsbbo/savFprIChAo8b8gykMCdeKpWayX4RVJOLPFmGrW216t521lHUHYGxdfr2AFU7bBxIjGKH3gaXr/wFvoXUcdvxxdJ4JstS/oyuXuvCBWJtUO4y3gFNthAySgEAAA=="
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-data-dev/CDKMetadata/Default"
+   }
+  }
+ },
+ "Outputs": {
+  "DatabaseEndpoint": {
+   "Description": "PostgreSQL database endpoint for unified platform",
+   "Value": {
+    "Fn::GetAtt": [
+     "UnifiedPlatformDatabase0624511C",
+     "Endpoint.Address"
+    ]
+   },
+   "Export": {
+    "Name": "UnifiedPlatformDatabaseEndpoint-dev"
+   }
+  },
+  "DatabaseSecretArn": {
+   "Description": "Database credentials secret ARN",
+   "Value": {
+    "Ref": "DatabaseSecretAttachment9A63A3D4"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformDatabaseSecretArn-dev"
+   }
+  },
+  "UnifiedPlatformBucketName": {
+   "Description": "S3 bucket for unified platform assets",
+   "Value": {
+    "Ref": "UnifiedPlatformBucket8310CA66"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformBucketName-dev"
+   }
+  },
+  "EventsPhotosBucketName": {
+   "Description": "S3 bucket for events photos",
+   "Value": {
+    "Ref": "EventsPhotosBucket48ACC295"
+   },
+   "Export": {
+    "Name": "EventsPhotosBucketName-dev"
+   }
+  },
+  "KMSKeyId": {
+   "Description": "KMS key for unified platform encryption",
+   "Value": {
+    "Ref": "UnifiedPlatformKey296E14F6"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformKMSKeyId-dev"
+   }
+  },
+  "UsersTableName": {
+   "Description": "Users table name",
+   "Value": {
+    "Ref": "UsersTable9725E9C8"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformUsersTable-dev"
+   }
+  },
+  "ProfilesTableName": {
+   "Description": "Profiles table name",
+   "Value": {
+    "Ref": "ProfilesTable3B48B4C6"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformProfilesTable-dev"
+   }
+  },
+  "InvitationsTableName": {
+   "Description": "Invitations table name",
+   "Value": {
+    "Ref": "InvitationsTable86405099"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformInvitationsTable-dev"
+   }
+  },
+  "EnrollmentsTableName": {
+   "Description": "Enrollments table name",
+   "Value": {
+    "Ref": "EnrollmentsTableE11B64C8"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformEnrollmentsTable-dev"
+   }
+  },
+  "EventsTableName": {
+   "Description": "Events table name",
+   "Value": {
+    "Ref": "EventsTableD24865E5"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformEventsTable-dev"
+   }
+  },
+  "DocumentsTableName": {
+   "Description": "Documents table name",
+   "Value": {
+    "Ref": "DocumentsTable7E808EE5"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformDocumentsTable-dev"
+   }
+  },
+  "SchedulingTableName": {
+   "Description": "Scheduling table name",
+   "Value": {
+    "Ref": "SchedulingTable1EC09B43"
+   },
+   "Export": {
+    "Name": "UnifiedPlatformSchedulingTable-dev"
+   }
+  },
+  "ExportsOutputFnGetAttUnifiedPlatformDatabase0624511CEndpointAddressA290300B": {
+   "Value": {
+    "Fn::GetAtt": [
+     "UnifiedPlatformDatabase0624511C",
+     "Endpoint.Address"
+    ]
+   },
+   "Export": {
+    "Name": "tsa-infra-data-dev:ExportsOutputFnGetAttUnifiedPlatformDatabase0624511CEndpointAddressA290300B"
+   }
+  },
+  "ExportsOutputRefDatabaseSecretAttachment9A63A3D478416D8E": {
+   "Value": {
+    "Ref": "DatabaseSecretAttachment9A63A3D4"
+   },
+   "Export": {
+    "Name": "tsa-infra-data-dev:ExportsOutputRefDatabaseSecretAttachment9A63A3D478416D8E"
+   }
+  }
+ },
+ "Parameters": {
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}

@@ -23,8 +23,8 @@ import {
 import { getCurrentUser } from '@/lib/auth'
 import { getCoachApiUrl } from '@/lib/ssm-config'
 
-// API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://deibk5wgx1.execute-api.us-east-2.amazonaws.com/prod'
+// API Configuration - Use proper SSM endpoint
+// const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://deibk5wgx1.execute-api.us-east-2.amazonaws.com/prod'
 
 // Types
 interface ParentInvitation {
@@ -56,11 +56,24 @@ export default function ParentInvitationViewPage() {
   const [deleting, setDeleting] = useState(false)
   const [resending, setResending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [apiBaseUrl, setApiBaseUrl] = useState<string>('')
+
+  // Load API endpoint from SSM
+  useEffect(() => {
+    try {
+      const url = getCoachApiUrl();
+      setApiBaseUrl(url);
+    } catch (error) {
+      console.error('Failed to load API endpoint:', error);
+      setError('Failed to load API configuration');
+    }
+  }, [])
 
   const fetchInvitation = useCallback(async () => {
+    if (!apiBaseUrl) return
+    
     try {
       setLoading(true)
-      // Get current user
       const user = getCurrentUser()
       if (!user?.email) {
         console.error('No user email available')
@@ -68,10 +81,11 @@ export default function ParentInvitationViewPage() {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/coach/invitations/${params.id}`, {
-        headers: {
+      // ✅ FIXED: Use proper API endpoint and authentication headers
+      const response = await fetch(`${apiBaseUrl}/parent-invitations/${params.id}`, {
+        headers: { 
           'Content-Type': 'application/json',
-          'X-User-Email': user.email,
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
         }
       })
 
@@ -93,19 +107,32 @@ export default function ParentInvitationViewPage() {
     } finally {
       setLoading(false)
     }
-  }, [params.id])
+  }, [params.id, apiBaseUrl])
 
   useEffect(() => {
-    fetchInvitation()
+    if (apiBaseUrl) {
+      fetchInvitation()
+    }
   }, [fetchInvitation])
 
   const handleDelete = async () => {
-    if (!invitation) return
+    if (!invitation || !apiBaseUrl) return
 
     try {
       setDeleting(true)
-      const response = await fetch(`${API_BASE_URL}/parent-invitations/${invitation.invitation_id}`, {
-        method: 'DELETE'
+      const user = getCurrentUser()
+      if (!user?.email) {
+        alert('Authentication error')
+        return
+      }
+
+      // ✅ FIXED: Use proper API endpoint and authentication headers
+      const response = await fetch(`${apiBaseUrl}/parent-invitations/${invitation.invitation_id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
       })
 
       if (response.ok) {
@@ -123,12 +150,23 @@ export default function ParentInvitationViewPage() {
   }
 
   const handleResend = async () => {
-    if (!invitation) return
+    if (!invitation || !apiBaseUrl) return
 
     try {
       setResending(true)
-      const response = await fetch(`${API_BASE_URL}/parent-invitations/${invitation.invitation_id}/resend`, {
-        method: 'PUT'
+      const user = getCurrentUser()
+      if (!user?.email) {
+        alert('Authentication error')
+        return
+      }
+
+      // ✅ FIXED: Use proper API endpoint and authentication headers
+      const response = await fetch(`${apiBaseUrl}/parent-invitations/${invitation.invitation_id}/resend`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
       })
 
       if (response.ok) {
@@ -143,6 +181,20 @@ export default function ParentInvitationViewPage() {
     } finally {
       setResending(false)
     }
+  }
+
+  // Show loading if API URL not ready
+  if (!apiBaseUrl) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-zinc-600">Loading API configuration...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const getStatusIcon = (status: string) => {

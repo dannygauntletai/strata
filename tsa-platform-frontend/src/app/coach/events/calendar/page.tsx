@@ -91,7 +91,12 @@ export default function EventsCalendarPage() {
         return
       }
 
-      const response = await fetch(`${apiBaseUrl}/events?created_by=${encodeURIComponent(user.email)}`)
+      const response = await fetch(`${apiBaseUrl}/events`, {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': user.token ? `Bearer ${user.token}` : ''
+        }
+      })
       if (response.ok) {
         const data = await response.json()
         setEvents(data.events || [])

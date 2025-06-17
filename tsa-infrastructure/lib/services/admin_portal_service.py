@@ -58,7 +58,7 @@ class AdminPortalService(Construct):
         self.shared_table_names = {
             "users": self.table_config.get_table_name("users"),
             "profiles": self.table_config.get_table_name("profiles"),
-            "invitations": self.table_config.get_table_name("invitations"),
+            "coach-invitations": self.table_config.get_table_name("coach-invitations"),
             "enrollments": self.table_config.get_table_name("enrollments"),
             "events": self.table_config.get_table_name("events"),
             "documents": self.table_config.get_table_name("documents")
@@ -150,7 +150,7 @@ class AdminPortalService(Construct):
             # Shared table environment variables from data infrastructure layer
             "TSA_USERS_TABLE": self.shared_table_names["users"],
             "TSA_PROFILES_TABLE": self.shared_table_names["profiles"],
-            "TSA_INVITATIONS_TABLE": self.shared_table_names["invitations"],
+            "TSA_INVITATIONS_TABLE": self.shared_table_names["coach-invitations"],
             "TSA_ENROLLMENTS_TABLE": self.shared_table_names["enrollments"],
             "TSA_EVENTS_TABLE": self.shared_table_names["events"],
             "TSA_DOCUMENTS_TABLE": self.shared_table_names["documents"],
@@ -226,7 +226,7 @@ class AdminPortalService(Construct):
         
         # Grant permissions to shared tables from centralized configuration
         shared_table_arns = []
-        for table_key in ["users", "profiles", "invitations", "enrollments", "events", "documents"]:
+        for table_key in ["users", "profiles", "coach-invitations", "enrollments", "events", "documents"]:
             table_name = self.table_config.get_table_name(table_key)
             shared_table_arns.extend([
                 f"arn:aws:dynamodb:*:*:table/{table_name}",
@@ -467,7 +467,7 @@ class AdminPortalService(Construct):
         # Export shared table names (imported from data layer) for legacy compatibility
         CfnOutput(
             self, "InvitationsTableName",
-            value=self.shared_table_names["invitations"],
+            value=self.shared_table_names["coach-invitations"],
             description="Coach Invitations DynamoDB Table Name (from data layer)",
             export_name=f"{self.stage}-InvitationsTableName"
         )
@@ -519,8 +519,10 @@ class AdminPortalService(Construct):
         # Export table names to SSM for other services to discover
         # Shared tables from data layer
         for table_name, table_name_str in self.shared_table_names.items():
+            # Clean up table name for parameter naming (remove hyphens)
+            param_name = table_name.replace("-", "").title()
             ssm.StringParameter(
-                self, f"{table_name.title()}TableParameter",
+                self, f"{param_name}TableParameter",
                 parameter_name=f"/tsa-shared/{self.stage}/table-names/{table_name}",
                 string_value=table_name_str,
                 description=f"Auto-managed {table_name.title()} table name for {self.stage} environment (from data layer)"
@@ -538,7 +540,7 @@ class AdminPortalService(Construct):
             # Shared tables from data infrastructure layer
             "users": self.shared_table_names["users"],
             "profiles": self.shared_table_names["profiles"],
-            "invitations": self.shared_table_names["invitations"],
+            "coach-invitations": self.shared_table_names["coach-invitations"],
             "enrollments": self.shared_table_names["enrollments"],
             "events": self.shared_table_names["events"],
             "documents": self.shared_table_names["documents"],

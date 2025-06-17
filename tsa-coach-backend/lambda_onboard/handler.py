@@ -22,6 +22,7 @@ dynamodb = boto3.resource('dynamodb')
 ONBOARDING_SESSIONS_TABLE = os.environ.get('ONBOARDING_SESSIONS_TABLE')
 INVITATIONS_TABLE = os.environ.get('INVITATIONS_TABLE')
 USERS_TABLE = os.environ.get('USERS_TABLE')
+PROFILES_TABLE = os.environ.get('PROFILES_TABLE')
 
 def lambda_handler(event, context):
     """Main Lambda handler for coach onboarding"""
@@ -349,8 +350,38 @@ def complete_onboarding(data: Dict[str, Any]) -> Dict[str, Any]:
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
         
-        # Save user profile
+        # Save user profile in users table (for Ed-Fi compliance)
         users_table.put_item(Item=user_profile)
+        
+        # ✅ ALSO create coach profile in profiles table (for coach portal functionality)
+        profiles_table = dynamodb.Table(PROFILES_TABLE)
+        
+        # Generate coach_id based on email normalization used by coach services
+        coach_id = f"coach_{email.replace('@', '_').replace('.', '_')}"
+        
+        # Create coach profile with required CoachProfile model fields
+        coach_profile = {
+            'profile_id': coach_id,  # Use profile_id as partition key (not coach_id)
+            'coach_id': coach_id,    # Keep coach_id as regular field for backwards compatibility
+            'school_id': step_data.get('school_id', step_data.get('school_name', 'default_school')),
+            'first_name': step_data.get('first_name', ''),
+            'last_name': step_data.get('last_name', ''),
+            'email': email,
+            'phone': step_data.get('cell_phone', step_data.get('phone', '')),
+            'specializations': step_data.get('specializations', step_data.get('specialties', [])),
+            'certification_level': step_data.get('certification_level', ''),
+            'years_experience': int(step_data.get('years_experience', 0)) if step_data.get('years_experience') else 0,
+            'students_assigned': [],  # Empty initially
+            'active_programs': [],    # Empty initially  
+            'preferences': {},        # Empty initially
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Save coach profile in profiles table
+        profiles_table.put_item(Item=coach_profile)
+        
+        logger.info(f"Created user profile in both users table (Ed-Fi) and profiles table (coach portal) for: {email}")
         
         # ✅ Register user with auth service for magic link compatibility
         auth_registration_success = False

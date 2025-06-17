@@ -1,0 +1,291 @@
+{
+ "Description": "Frontend deployment for TSA Unified Platform - unified and admin frontends (dev)",
+ "Resources": {
+  "CoachPortalAmplifyAppRole8809CBF8": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "amplify.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-frontend-dev/CoachPortalAmplifyApp/Role/Resource"
+   }
+  },
+  "CoachPortalAmplifyAppF39D9D20": {
+   "Type": "AWS::Amplify::App",
+   "Properties": {
+    "BasicAuthConfig": {
+     "EnableBasicAuth": false
+    },
+    "EnvironmentVariables": [
+     {
+      "Name": "NEXT_PUBLIC_API_URL",
+      "Value": {
+       "Fn::Join": [
+        "",
+        [
+         "https://",
+         {
+          "Fn::ImportValue": "tsa-coach-backend-dev:ExportsOutputRefCoachPortalServiceCoachPortalAPI18AC990327E8A186"
+         },
+         ".execute-api.us-east-2.",
+         {
+          "Ref": "AWS::URLSuffix"
+         },
+         "/",
+         {
+          "Fn::ImportValue": "tsa-coach-backend-dev:ExportsOutputRefCoachPortalServiceCoachPortalAPIDeploymentStagedevA1059199446272D2"
+         },
+         "/"
+        ]
+       ]
+      }
+     },
+     {
+      "Name": "NEXT_PUBLIC_PASSWORDLESS_AUTH_URL",
+      "Value": {
+       "Fn::Join": [
+        "",
+        [
+         "https://",
+         {
+          "Fn::ImportValue": "tsa-infra-auth-dev:ExportsOutputRefPasswordlessAPI1E2C09CE082AD293"
+         },
+         ".execute-api.us-east-2.",
+         {
+          "Ref": "AWS::URLSuffix"
+         },
+         "/",
+         {
+          "Fn::ImportValue": "tsa-infra-auth-dev:ExportsOutputRefPasswordlessAPIDeploymentStagedev02BAB72C71E0ABD8"
+         },
+         "/"
+        ]
+       ]
+      }
+     },
+     {
+      "Name": "NEXT_PUBLIC_ADMIN_API_URL",
+      "Value": {
+       "Fn::Join": [
+        "",
+        [
+         "https://",
+         {
+          "Fn::ImportValue": "tsa-admin-backend-dev:ExportsOutputRefAdminPortalServiceAdminPortalAPI1F0D73691D72847A"
+         },
+         ".execute-api.us-east-2.",
+         {
+          "Ref": "AWS::URLSuffix"
+         },
+         "/",
+         {
+          "Fn::ImportValue": "tsa-admin-backend-dev:ExportsOutputRefAdminPortalServiceAdminPortalAPIDeploymentStagedev5A0D556D2E5B0924"
+         },
+         "/"
+        ]
+       ]
+      }
+     },
+     {
+      "Name": "NEXT_PUBLIC_STAGE",
+      "Value": "dev"
+     },
+     {
+      "Name": "NEXT_PUBLIC_ENVIRONMENT",
+      "Value": "dev"
+     },
+     {
+      "Name": "_LIVE_UPDATES",
+      "Value": "[]"
+     },
+     {
+      "Name": "NEXT_PUBLIC_COGNITO_REGION",
+      "Value": "us-east-1"
+     },
+     {
+      "Name": "NEXT_PUBLIC_APP_NAME",
+      "Value": "TSA Coach Portal (DEV)"
+     },
+     {
+      "Name": "NEXT_PUBLIC_SENTRY_ENVIRONMENT",
+      "Value": "dev"
+     }
+    ],
+    "IAMServiceRole": {
+     "Fn::GetAtt": [
+      "CoachPortalAmplifyAppRole8809CBF8",
+      "Arn"
+     ]
+    },
+    "Name": "tsa-platform-frontend-dev",
+    "OauthToken": {
+     "Fn::Join": [
+      "",
+      [
+       "{{resolve:secretsmanager:arn:aws:secretsmanager:us-east-2:",
+       {
+        "Ref": "AWS::AccountId"
+       },
+       ":secret:github-token:SecretString:::}}"
+      ]
+     ]
+    },
+    "Platform": "WEB",
+    "Repository": "https://github.com/dannygauntletai/tsa-platform-frontend",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-frontend-dev/CoachPortalAmplifyApp/Resource"
+   }
+  },
+  "CoachPortalAmplifyAppmainF9AC7F3F": {
+   "Type": "AWS::Amplify::Branch",
+   "Properties": {
+    "AppId": {
+     "Fn::GetAtt": [
+      "CoachPortalAmplifyAppF39D9D20",
+      "AppId"
+     ]
+    },
+    "BranchName": "main",
+    "EnableAutoBuild": true,
+    "EnablePullRequestPreview": true,
+    "Stage": "DEVELOPMENT",
+    "Tags": [
+     {
+      "Key": "CostCenter",
+      "Value": "Engineering"
+     },
+     {
+      "Key": "Environment",
+      "Value": "dev"
+     },
+     {
+      "Key": "Layer",
+      "Value": "Infrastructure"
+     },
+     {
+      "Key": "ManagedBy",
+      "Value": "CDK"
+     },
+     {
+      "Key": "Owner",
+      "Value": "TSA-Engineering"
+     },
+     {
+      "Key": "Project",
+      "Value": "TSA-Unified-Platform"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-frontend-dev/CoachPortalAmplifyApp/main/Resource"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/zWMSw7CIBRF18IcXksdOPWzAYMLME+kKRYoARrTEPZuiTg6yT05d4Ch7yFzgp/I5GtmRj8h3xPKmQoVlzVIRXf3yBotZLEYRa+jqywUrTd63CDvy9n7Ki4BnZxKKZQzNH5C6MmpfXeVrWky1+zf0NuWpsV1B+AcjuQdtWZhdUlbBeLHL1MehS2vAAAA"
+   },
+   "Metadata": {
+    "aws:cdk:path": "tsa-infra-frontend-dev/CDKMetadata/Default"
+   }
+  }
+ },
+ "Parameters": {
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}

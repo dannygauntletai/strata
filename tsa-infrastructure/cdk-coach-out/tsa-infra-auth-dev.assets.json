@@ -1,0 +1,36 @@
+{
+  "version": "44.0.0",
+  "files": {
+    "c30e79f3679c808e1c9c9907f82898ea0a264578ad04e32a555e78e5f7f77822": {
+      "displayName": "MagicLinkHandler/Code",
+      "source": {
+        "path": "asset.c30e79f3679c808e1c9c9907f82898ea0a264578ad04e32a555e78e5f7f77822",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "c30e79f3679c808e1c9c9907f82898ea0a264578ad04e32a555e78e5f7f77822.zip",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    },
+    "94f86fe986d95ff3553362ade17a5f3e8ff5563f8496fb588de489ec0ba533d2": {
+      "displayName": "tsa-infra-auth-dev Template",
+      "source": {
+        "path": "tsa-infra-auth-dev.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "current_account-us-east-2": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-2",
+          "objectKey": "94f86fe986d95ff3553362ade17a5f3e8ff5563f8496fb588de489ec0ba533d2.json",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-2"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}
