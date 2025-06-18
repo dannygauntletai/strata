@@ -220,8 +220,8 @@ export default function CoachDashboard() {
       
       // Calculate stats
         const totalInvites = invitations.length
-        const pendingInvites = invitations.filter(inv => inv.status === 'pending').length
-        const acceptedInvites = invitations.filter(inv => inv.status === 'accepted').length
+        const pendingInvites = invitations.filter((inv: any) => inv.status === 'pending').length
+        const acceptedInvites = invitations.filter((inv: any) => inv.status === 'accepted').length
       
       setStats({
           totalInvites,

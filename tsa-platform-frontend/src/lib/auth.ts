@@ -272,22 +272,29 @@ class CoachAuth {
         },
         body: JSON.stringify({ 
           token,
-          email: email.toLowerCase().trim(),
-          user_role: role || 'coach'
+          email: email.toLowerCase().trim()
+          // Note: user_role is now extracted from JWT, not passed in request
         })
       })
 
       const data = await response.json()
 
       if (response.ok && data.tokens) {
+        console.log('✅ JWT token verification successful:', { 
+          user_role: data.user_role, 
+          user: data.user,
+          expires_in: data.expires_in 
+        });
+        
         // Store tokens securely
         this.storeTokens(data.tokens)
         
-        // Store user role information
+        // Store user role information from JWT response
         if (data.user_role) {
           localStorage.setItem('invitation_context', JSON.stringify({
             user_role: data.user_role,
-            verified_at: new Date().toISOString()
+            verified_at: new Date().toISOString(),
+            invitation_token: data.user?.invitation_token // Store invitation token from JWT
           }))
         }
 

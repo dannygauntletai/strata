@@ -19,7 +19,8 @@ from shared_utils import (
     get_admin_profile,
     create_response,
     create_error_response,
-    create_health_response
+    create_health_response,
+    validate_user_exists
 )
 
 # Initialize shared config
@@ -82,14 +83,25 @@ def handle_verify_token(event: Dict[str, Any], context: Any, request_id: str) ->
         if jwt_data.get('email', '').lower() != email:
             return create_error_response('Token email mismatch', 400, request_id=request_id)
         
+        # Get user role and invitation token from JWT
+        user_role = jwt_data.get('user_role', 'coach')
+        invitation_token = jwt_data.get('invitation_token')
+        
+        # 🔐 SECURITY: Only authenticate existing users - do NOT create users here
+        # User creation should only happen in magic link generation after proper authorization
+        print(f"[{request_id}] Checking if user exists in Cognito: {email}")
+        if not validate_user_exists(email):
+            print(f"[{request_id}] User {email} does not exist in Cognito - rejecting authentication")
+            return create_error_response('User not found. Please request a new magic link.', 404, request_id=request_id)
+        
+        print(f"[{request_id}] User {email} exists in Cognito, proceeding with authentication")
+        
         # Generate Cognito tokens
         auth_result = generate_cognito_tokens(email, request_id)
         if not auth_result['success']:
             return create_error_response(auth_result['error'], 500, request_id=request_id)
         
         # Get user profile information based on role
-        user_role = jwt_data.get('user_role', 'coach')
-        invitation_token = jwt_data.get('invitation_token')
         
         if user_role == 'parent':
             user_profile = get_parent_profile(email, invitation_token, request_id)

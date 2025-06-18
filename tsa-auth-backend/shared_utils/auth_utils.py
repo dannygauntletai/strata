@@ -54,11 +54,11 @@ def create_cognito_user(email: str, user_role: str, invitation_token: str = None
             MessageAction='SUPPRESS'  # Don't send Cognito's default email
         )
         
-        # 2. Set user as CONFIRMED (skip password setup)
+        # 2. Set user as CONFIRMED with secure temporary password (passwordless system)
         cognito_client.admin_set_user_password(
             UserPoolId=user_pool_id,
             Username=email,
-            Password=secrets.token_urlsafe(32),  # Random, never used
+            Password=generate_secure_password(),  # Use secure password generator that meets Cognito policy
             Permanent=True
         )
         

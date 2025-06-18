@@ -71,6 +71,10 @@ function AuthGuardContent({ children }: AuthGuardProps) {
         await handleTokenVerification(token, verifyEmail);
       } else {
         setIsLoading(false);
+        // Schedule redirect to login for unauthenticated users on protected routes
+        if (pathname !== '/login' && pathname !== '/verify') {
+          setShouldRedirectToLogin(true);
+        }
       }
     };
 
@@ -161,7 +165,7 @@ function AuthGuardContent({ children }: AuthGuardProps) {
 
   // Don't render anything if not authenticated (redirect will happen via useEffect)
   if (!isAuthenticated) {
-    setShouldRedirectToLogin(true);
+    // Don't call setState during render - this should be handled in useEffect
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">

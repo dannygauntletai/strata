@@ -97,14 +97,23 @@ function LoginContent() {
           return
         }
         
-        // Standard 200 response - email was sent
+        // Standard 200 response - email was sent (JWT magic link system)
+        // New JWT backend returns: { message, email, user_role, user_exists }
+        console.log('✅ Magic link sent successfully:', data)
         setIsSubmitted(true)
       } else {
-        // Role-specific error messages
-        if (role === 'coach' && response.status === 404) {
-          setError('Email not found. Only invited coaches can access this portal. Please contact an administrator for an invitation.')
-        } else if (role === 'parent' && response.status === 404) {
-          setError('Invalid invitation or email address. Please check your invitation email and try again.')
+        // Role-specific error messages for JWT magic link system
+        if (response.status === 403) {
+          // JWT system returns 403 for access denied
+          if (role === 'coach') {
+            setError('Access denied. Only invited coaches can access this portal. Please contact an administrator for an invitation.')
+          } else if (role === 'parent') {
+            setError('Access denied. Invalid invitation or email address. Please check your invitation email and try again.')
+          } else {
+            setError(data.error || 'Access denied. Please contact support.')
+          }
+        } else if (response.status === 404) {
+          setError('Email not found. Please check your email address and try again.')
         } else {
           setError(data.error || 'Failed to send login link. Please try again.')
         }

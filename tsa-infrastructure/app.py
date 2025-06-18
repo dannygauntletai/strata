@@ -8,7 +8,7 @@ from lib.shared.networking_stack import NetworkingStack
 from lib.shared.security_stack import SecurityStack
 from lib.shared.data_stack import DataStack
 from lib.passwordless_auth_stack import PasswordlessAuthStack
-from lib.frontend_stack import FrontendStack
+# from lib.frontend_stack import FrontendStack  # Removed: Amplify deployment removed
 # from lib.migration_stack import MigrationStack  # Removed - handled by data stack
 from lib.services.coach_portal_service import CoachPortalService
 from lib.services.parent_portal_service import ParentPortalService
@@ -51,10 +51,16 @@ def get_environment_config(stage: str) -> dict:
             "cors_origins": {
                 # Staging CORS origins
                 "unified": [
-                    "https://staging.sportsacademy.tech"
+                    "https://staging.sportsacademy.tech",
+                    # Add localhost support for local development
+                    "http://localhost:3000",
+                    "https://localhost:3000"
                 ],
                 "admin": [
-                    "https://admin-staging.sportsacademy.tech"
+                    "https://admin-staging.sportsacademy.tech",
+                    # Add localhost support for local development
+                    "http://localhost:3001",
+                    "https://localhost:3001"
                 ]
             },
             "domains": {
@@ -226,23 +232,24 @@ def main():
     parent_backend_stack.add_dependency(admin_backend_stack)  # Parent depends on admin for shared tables
     parent_backend_stack.add_dependency(coach_backend_stack)  # Parent depends on coach for coach-specific data
 
-    # 8. Frontend Stack - Deploys React/Next.js frontends
-    frontend_stack = FrontendStack(
-        app, f'tsa-infra-frontend-{stage}',
-        stage=stage,
-        api_endpoints={
-            "coach_portal": coach_service.api_url,
-            "parent_portal": parent_service.api_url,
-            "admin_portal": admin_service.api_url,
-            "passwordless_auth": auth_stack.api.url
-        },
-        env=env,
-        description=f"Frontend deployment for TSA Unified Platform - unified and admin frontends ({stage})"
-    )
-    frontend_stack.add_dependency(coach_backend_stack)
-    frontend_stack.add_dependency(parent_backend_stack)
-    frontend_stack.add_dependency(admin_backend_stack)
-    frontend_stack.add_dependency(auth_stack)
+    # 8. Frontend Stack - REMOVED: Amplify deployment removed
+    # Frontend will be deployed separately outside of CDK
+    # frontend_stack = FrontendStack(
+    #     app, f'tsa-infra-frontend-{stage}',
+    #     stage=stage,
+    #     api_endpoints={
+    #         "coach_portal": coach_service.api_url,
+    #         "parent_portal": parent_service.api_url,
+    #         "admin_portal": admin_service.api_url,
+    #         "passwordless_auth": auth_stack.api.url
+    #     },
+    #     env=env,
+    #     description=f"Frontend deployment for TSA Unified Platform - unified and admin frontends ({stage})"
+    # )
+    # frontend_stack.add_dependency(coach_backend_stack)
+    # frontend_stack.add_dependency(parent_backend_stack)
+    # frontend_stack.add_dependency(admin_backend_stack)
+    # frontend_stack.add_dependency(auth_stack)
 
     # Add comprehensive tags
     cdk.Tags.of(app).add("Project", "TSA-Unified-Platform")
@@ -257,7 +264,8 @@ def main():
     cdk.Tags.of(data_stack).add("Layer", "Infrastructure")
     cdk.Tags.of(auth_stack).add("Layer", "Infrastructure")
     # Migration stack removed - functionality moved to data stack
-    cdk.Tags.of(frontend_stack).add("Layer", "Infrastructure")
+    # Frontend stack removed - Amplify deployment removed
+    # cdk.Tags.of(frontend_stack).add("Layer", "Infrastructure")
     
     # Add portal-specific tags for better organization
     cdk.Tags.of(coach_backend_stack).add("Layer", "Application")

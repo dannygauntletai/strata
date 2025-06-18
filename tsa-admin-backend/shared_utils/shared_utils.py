@@ -13,12 +13,50 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_cors_response(status_code: int, body: dict) -> dict:
+def get_allowed_origin(event: Dict[str, Any] = None) -> str:
+    """Get allowed CORS origin based on environment and request origin"""
+    # Environment-specific CORS origins (per .cursorrules security)
+    cors_origins = {
+        "dev": [
+            "http://localhost:3000",
+            "https://localhost:3000",
+            "http://localhost:3001",
+            "https://localhost:3001"
+        ],
+        "staging": [
+            "https://admin-staging.sportsacademy.tech",
+            "https://staging.sportsacademy.tech",
+            # Add localhost support for local development
+            "http://localhost:3001",
+            "https://localhost:3001"
+        ],
+        "prod": [
+            "https://admin.sportsacademy.tech",
+            "https://app.sportsacademy.tech"
+        ]
+    }
+    
+    # Get current environment (default to dev for safety)
+    current_env = os.environ.get('STAGE', 'dev')
+    allowed_origins = cors_origins.get(current_env, cors_origins['dev'])
+    
+    # Get request origin if event provided
+    if event:
+        request_origin = event.get('headers', {}).get('origin') or event.get('headers', {}).get('Origin')
+        if request_origin and request_origin in allowed_origins:
+            return request_origin
+    
+    return allowed_origins[0]  # Safe fallback
+
+
+def create_cors_response(status_code: int, body: dict, event: Dict[str, Any] = None) -> dict:
     """Create standardized response with proper CORS headers"""
+    cors_origin = get_allowed_origin(event)
+    
     return {
         "statusCode": status_code,
         "headers": {
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": cors_origin,
             "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD",
             "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Requested-With,Accept,Accept-Language,Cache-Control",
             "Access-Control-Allow-Credentials": "true",

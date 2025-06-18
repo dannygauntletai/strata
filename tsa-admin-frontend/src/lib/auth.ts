@@ -653,6 +653,8 @@ export class AdminAuth {
         email: email.toLowerCase().trim()
       };
 
+      console.log('📍 Request body:', requestBody);
+
       const response = await fetch(verifyUrl, {
         method: 'POST',
         headers: {
@@ -670,6 +672,11 @@ export class AdminAuth {
 
       if (response.ok && data.tokens?.access_token) {
         const now = Date.now();
+        console.log('✅ JWT token verification successful:', { 
+          user_role: data.user_role, 
+          user: data.user,
+          expires_in: data.expires_in 
+        });
         
         // Calculate token expiration with enhanced duration (up to 24 hours)
         let expiresIn = data.expires_in || 3600; // Default 1 hour in seconds
