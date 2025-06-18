@@ -33,7 +33,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Handle CORS preflight immediately
         if event.get('httpMethod') == 'OPTIONS':
-            return create_cors_response(204, {})
+            return create_cors_response(204, {}, event)
         
         http_method = event.get('httpMethod', '')
         path_parameters = event.get('pathParameters') or {}
@@ -42,27 +42,27 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Route to appropriate handler
         if http_method == 'GET':
             if invitation_id:
-                return get_invitation(invitation_id)
+                return get_invitation(invitation_id, event)
             else:
                 return list_invitations(event)
         elif http_method == 'POST':
             if 'resend' in event.get('path', ''):
-                return resend_invitation(invitation_id)
+                return resend_invitation(invitation_id, event)
             else:
                 return create_invitation(event)
         elif http_method == 'PUT':
             return update_invitation(invitation_id, event)
         elif http_method == 'DELETE':
             if 'delete' in event.get('path', ''):
-                return delete_invitation(invitation_id)
+                return delete_invitation(invitation_id, event)
             else:
-                return cancel_invitation(invitation_id)
+                return cancel_invitation(invitation_id, event)
         else:
-            return create_cors_response(405, {'error': 'Method not allowed'})
+            return create_cors_response(405, {'error': 'Method not allowed'}, event)
             
     except Exception as e:
         logger.error(f"Error in invitation handler: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
+        return create_cors_response(500, {'error': str(e)}, event)
 
 
 def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -82,21 +82,21 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
             return create_cors_response(400, {
                 'error': f'Missing required fields: {", ".join(missing_fields)}',
                 'required_fields': required_fields
-            })
+            }, event)
         
         # Validate email format (basic validation)
         email = body['email'].lower().strip()
         if '@' not in email or '.' not in email:
-            return create_cors_response(400, {'error': 'Invalid email format'})
+            return create_cors_response(400, {'error': 'Invalid email format'}, event)
         
         # Validate phone format (basic validation - remove non-digits and check length)
         phone = ''.join(filter(str.isdigit, body['phone']))
         if len(phone) < 10:
-            return create_cors_response(400, {'error': 'Phone number must be at least 10 digits'})
+            return create_cors_response(400, {'error': 'Phone number must be at least 10 digits'}, event)
         
         # Check for duplicate pending invitations
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations'))
         
         # Check if active invitation already exists for this email
         response = invitations_table.scan(
@@ -109,7 +109,7 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         )
         
         if response.get('Items'):
-            return create_cors_response(409, {'error': 'Active invitation already exists for this email'})
+            return create_cors_response(409, {'error': 'Active invitation already exists for this email'}, event)
         
         # Generate invitation
         invitation_id = str(uuid.uuid4())
@@ -170,11 +170,11 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
                 'location': invitation['location'],
                 'phone': invitation['phone_formatted']
             }
-        })
+        }, event)
         
     except Exception as e:
         logger.error(f"Error creating invitation: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
+        return create_cors_response(500, {'error': str(e)}, event)
 
 
 def format_phone_number(phone: str) -> str:
@@ -201,7 +201,7 @@ def list_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         limit = int(query_params.get('limit', 50))
         
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations'))
         
         if status_filter:
             # Query by status using GSI
@@ -225,38 +225,38 @@ def list_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         return create_cors_response(200, {
             'invitations': invitations,
             'count': len(invitations)
-        })
+        }, event)
         
     except Exception as e:
         logger.error(f"Error listing invitations: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
+        return create_cors_response(500, {'error': str(e)}, event)
 
 
-def get_invitation(invitation_id: str) -> Dict[str, Any]:
+def get_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
     """Get specific invitation details"""
     try:
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations'))
         
         response = invitations_table.get_item(
             Key={'invitation_id': invitation_id}
         )
         
         if 'Item' not in response:
-            return create_cors_response(404, {'error': 'Invitation not found'})
+            return create_cors_response(404, {'error': 'Invitation not found'}, event)
         
-        return create_cors_response(200, response['Item'])
+        return create_cors_response(200, response['Item'], event)
         
     except Exception as e:
         logger.error(f"Error getting invitation: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
+        return create_cors_response(500, {'error': str(e)}, event)
 
 
-def resend_invitation(invitation_id: str) -> Dict[str, Any]:
+def resend_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
     """Resend an invitation email"""
     try:
         # Get invitation details
-        invitation_response = get_invitation(invitation_id)
+        invitation_response = get_invitation(invitation_id, event)
         if invitation_response['statusCode'] != 200:
             return invitation_response
         
@@ -264,10 +264,10 @@ def resend_invitation(invitation_id: str) -> Dict[str, Any]:
         
         # Check if invitation is still valid
         if invitation['status'] != 'pending':
-            return create_cors_response(400, {'error': 'Invitation is no longer pending'})
+            return create_cors_response(400, {'error': 'Invitation is no longer pending'}, event)
         
         if datetime.utcnow().timestamp() > invitation['expires_at']:
-            return create_cors_response(400, {'error': 'Invitation has expired'})
+            return create_cors_response(400, {'error': 'Invitation has expired'}, event)
         
         # Resend email
         invite_url = f"{os.environ.get('TSA_FRONTEND_URL', 'https://coach.texassportsacademy.com')}/onboarding?invite={invitation['invitation_token']}"
@@ -275,25 +275,25 @@ def resend_invitation(invitation_id: str) -> Dict[str, Any]:
         
         # Update last sent timestamp
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations'))
         invitations_table.update_item(
             Key={'invitation_id': invitation_id},
             UpdateExpression='SET last_sent_at = :timestamp',
             ExpressionAttributeValues={':timestamp': datetime.utcnow().isoformat()}
         )
         
-        return create_cors_response(200, {'message': 'Invitation resent successfully'})
+        return create_cors_response(200, {'message': 'Invitation resent successfully'}, event)
         
     except Exception as e:
         logger.error(f"Error resending invitation: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
+        return create_cors_response(500, {'error': str(e)}, event)
 
 
-def cancel_invitation(invitation_id: str) -> Dict[str, Any]:
+def cancel_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
     """Cancel an invitation"""
     try:
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations'))
         
         # Update status to cancelled
         invitations_table.update_item(
@@ -306,23 +306,23 @@ def cancel_invitation(invitation_id: str) -> Dict[str, Any]:
             }
         )
         
-        return create_cors_response(200, {'message': 'Invitation cancelled successfully'})
+        return create_cors_response(200, {'message': 'Invitation cancelled successfully'}, event)
         
     except Exception as e:
         logger.error(f"Error cancelling invitation: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
+        return create_cors_response(500, {'error': str(e)}, event)
 
 
-def delete_invitation(invitation_id: str) -> Dict[str, Any]:
+def delete_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
     """Permanently delete an invitation"""
     try:
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations'))
         
         # First check if invitation exists and get email for logging
         response = invitations_table.get_item(Key={'invitation_id': invitation_id})
         if 'Item' not in response:
-            return create_cors_response(404, {'error': 'Invitation not found'})
+            return create_cors_response(404, {'error': 'Invitation not found'}, event)
         
         invitation = response['Item']
         
@@ -340,11 +340,11 @@ def delete_invitation(invitation_id: str) -> Dict[str, Any]:
             }
         )
         
-        return create_cors_response(200, {'message': 'Invitation deleted permanently'})
+        return create_cors_response(200, {'message': 'Invitation deleted permanently'}, event)
         
     except Exception as e:
         logger.error(f"Error deleting invitation: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
+        return create_cors_response(500, {'error': str(e)}, event)
 
 
 def update_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -370,7 +370,7 @@ def update_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, An
                     expression_values[f':{field}'] = body[field]
         
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations'))
         
         invitations_table.update_item(
             Key={'invitation_id': invitation_id},
@@ -379,11 +379,11 @@ def update_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, An
             ExpressionAttributeNames=expression_names if expression_names else None
         )
         
-        return create_cors_response(200, {'message': 'Invitation updated successfully'})
+        return create_cors_response(200, {'message': 'Invitation updated successfully'}, event)
         
     except Exception as e:
         logger.error(f"Error updating invitation: {str(e)}")
-        return create_cors_response(500, {'error': str(e)})
+        return create_cors_response(500, {'error': str(e)}, event)
 
 
 def send_invitation_email(email: str, invite_url: str, invitation: Dict[str, Any]) -> None:
