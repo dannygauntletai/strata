@@ -29,7 +29,7 @@ This document outlines the magic link authentication system implemented for the 
     ↓ Magic Link Request
 🔗 Magic Link API (blka63phul.execute-api.us-east-2.amazonaws.com/v1)
     ↓ User Validation & Token Generation
-🗄️ DynamoDB (magic-links-v1-dev)
+🗄️ DynamoDB (magic-linksdev)
     ↓ Cognito User Creation/Validation  
 👤 Cognito User Pool (us-east-2_3xlxRQk3y)
     ↓ Magic Link Email
@@ -217,7 +217,7 @@ v1//auth/magic-link (404 error)
 3. **Check Magic Link Logs:**
    ```bash
    # View Lambda logs
-   aws logs tail /aws/lambda/tsa-magic-link-v1-dev --follow
+   aws logs tail /aws/lambda/tsa-magic-linkdev --follow
    ```
 
 4. **Test Token Verification:**
@@ -259,7 +259,7 @@ const productionConfig = {
 - **Infrastructure:** `tsa-infrastructure/lib/passwordless_auth_stack.py`
 - **API Documentation:** `tsa-infrastructure/FRONTEND_INTEGRATION_GUIDE.md`
 - **Cognito User Pool:** `us-east-2_3xlxRQk3y`
-- **DynamoDB Table:** `magic-links-v1-dev`
+- **DynamoDB Table:** `magic-linksdev`
 
 ---
 

@@ -6,6 +6,7 @@ from aws_cdk import (
     Duration,
     CfnOutput,
     BundlingOptions,
+    RemovalPolicy,
     aws_lambda as lambda_,
     aws_apigateway as apigateway,
     aws_iam as iam,
@@ -16,7 +17,12 @@ from aws_cdk import (
 )
 from constructs import Construct
 from typing import Dict, Any
+from shared_config import get_config
 from ..shared.table_names import get_resource_config, get_table_iam_arns
+from ..shared.table_utils import get_or_create_table, get_standard_table_props
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AdminPortalService(Construct):
@@ -30,8 +36,9 @@ class AdminPortalService(Construct):
         self.stage = stage
         self.env_config = shared_resources.get("environment_config", {})
         
-        # Get centralized table configuration
-        self.table_config = get_resource_config(stage)
+        # Get centralized resource configuration using shared_config (single source of truth)
+        self.shared_config = get_config(stage)
+        self.table_config = self.shared_config
         
         # Create streamlined resources
         self._create_lambda_layers()
@@ -54,36 +61,54 @@ class AdminPortalService(Construct):
     def _create_core_dynamodb_tables(self):
         """Import core DynamoDB tables from data layer - Data layer is single source of truth"""
         
-        # Reference shared table names from centralized configuration (single source of truth)
-        self.shared_table_names = {
-            "users": self.table_config.get_table_name("users"),
-            "profiles": self.table_config.get_table_name("profiles"),
-            "coach-invitations": self.table_config.get_table_name("coach-invitations"),
-            "enrollments": self.table_config.get_table_name("enrollments"),
-            "events": self.table_config.get_table_name("events"),
-            "documents": self.table_config.get_table_name("documents")
-        }
+        # Import shared tables from data stack (these are created by data stack)
+        self.shared_table_names = self.table_config.get_all_table_names()
+        
+        # Import shared tables using CloudFormation exports from data stack
+        try:
+            self.users_table = dynamodb.Table.from_table_name(
+                self, "ImportedUsersTable",
+                table_name=self.shared_table_names["users"]
+            )
+            self.profiles_table = dynamodb.Table.from_table_name(
+                self, "ImportedProfilesTable", 
+                table_name=self.shared_table_names["profiles"]
+            )
+            self.coach_invitations_table = dynamodb.Table.from_table_name(
+                self, "ImportedCoachInvitationsTable",
+                table_name=self.shared_table_names["coach-invitations"]
+            )
+            self.enrollments_table = dynamodb.Table.from_table_name(
+                self, "ImportedEnrollmentsTable",
+                table_name=self.shared_table_names["enrollments"]
+            )
+            self.events_table = dynamodb.Table.from_table_name(
+                self, "ImportedEventsTable",
+                table_name=self.shared_table_names["events"]
+            )
+            self.documents_table = dynamodb.Table.from_table_name(
+                self, "ImportedDocumentsTable",
+                table_name=self.shared_table_names["documents"]
+            )
+        except Exception as e:
+            logger.warning(f"Could not import shared tables from data stack: {e}")
         
         # ========================================
-        # ADMIN-SPECIFIC TABLES (Admin creates these)
+        # ADMIN-SPECIFIC TABLES (Direct Creation)
         # ========================================
         
-        # Get admin-specific table names from centralized config
-        table_names = self.table_config.get_all_table_names()
+        # Create admin-specific audit logs table directly
+        audit_logs_table_name = f"admin-audit-logs-{self.stage}"
         
-        # Audit Logs Table - Admin-specific system audit trail
         self.audit_logs_table = dynamodb.Table(
             self, "AuditLogsTable",
-            table_name=self.table_config.get_table_name("audit-logs"),
+            table_name=audit_logs_table_name,
             partition_key=dynamodb.Attribute(
                 name="log_id",
                 type=dynamodb.AttributeType.STRING
             ),
-            sort_key=dynamodb.Attribute(
-                name="timestamp",
-                type=dynamodb.AttributeType.STRING
-            ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
             time_to_live_attribute="expires_at",  # Auto-expire old logs
             point_in_time_recovery=True
         )
@@ -100,8 +125,6 @@ class AdminPortalService(Construct):
                 type=dynamodb.AttributeType.STRING
             )
         )
-        
-
         
     def _create_lambda_functions(self):
         """Create Lambda functions for core admin functionality"""
@@ -305,11 +328,21 @@ class AdminPortalService(Construct):
     def _create_api_gateway(self):
         """Create streamlined API Gateway for admin functionality"""
         
-        # Create log group for API Gateway
-        log_group = logs.LogGroup(
-            self, "AdminPortalAPILogs",
-            log_group_name=self.table_config.get_log_group_names()["admin_api"],
-        )
+        # Create log group for API Gateway (import existing if present)
+        log_group_name = self.table_config.get_log_group_names()["admin_api"]
+        try:
+            log_group = logs.LogGroup.from_log_group_name(
+                self, "AdminPortalAPILogs",
+                log_group_name=log_group_name
+            )
+            print(f"✅ Imported existing log group: {log_group_name}")
+        except Exception:
+            log_group = logs.LogGroup(
+                self, "AdminPortalAPILogs",
+                log_group_name=log_group_name,
+                retention=logs.RetentionDays.ONE_MONTH
+            )
+            print(f"🆕 Created new log group: {log_group_name}")
         
         # Get environment-specific CORS origins
         cors_origins = self.env_config.get("cors_origins", {})
@@ -321,7 +354,7 @@ class AdminPortalService(Construct):
         # Create API Gateway
         self.api = apigateway.RestApi(
             self, "AdminPortalAPI",
-            rest_api_name=self.table_config.get_api_names()["admin_api"],
+            rest_api_name=self.table_config.get_api_names()["admin"],
             description=f"Streamlined API for TSA Admin Portal - Coach Invitations and Audit Health ({self.stage})",
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=admin_origins,
@@ -508,25 +541,18 @@ class AdminPortalService(Construct):
             export_name=f"{self.stage}-AuditLogsTableName"
         )
         
-        # Export API URL to SSM Parameter Store for runtime discovery
-        ssm.StringParameter(
-            self, "AdminAPIUrlParameter",
-            parameter_name=f"/tsa/{self.stage}/api-urls/admin",  # ✅ STANDARDIZED: Consistent prefix
-            string_value=self.api.url,
-            description=f"Auto-managed Admin API URL for {self.stage} environment"
-        )
+        # SSM parameters managed externally to prevent CloudFormation conflicts
+        # See scripts/manage-ssm-parameters.sh for parameter management
+        # Parameters:
+        # - /tsa/{stage}/api-urls/admin
+        # - /tsa-shared/{stage}/table-names/* (6 shared table parameters)
         
-        # Export table names to SSM for other services to discover
-        # Shared tables from data layer
-        for table_name, table_name_str in self.shared_table_names.items():
-            # Clean up table name for parameter naming (remove hyphens)
-            param_name = table_name.replace("-", "").title()
-            ssm.StringParameter(
-                self, f"{param_name}TableParameter",
-                parameter_name=f"/tsa-shared/{self.stage}/table-names/{table_name}",
-                string_value=table_name_str,
-                description=f"Auto-managed {table_name.title()} table name for {self.stage} environment (from data layer)"
-            )
+        # Export API URL and table names for external SSM parameter management
+        CfnOutput(
+            self, "SSMParameterValues",
+            value=f"API_URL={self.api.url}",
+            description="Values for external SSM parameter management"
+        )
     
     @property
     def api_url(self) -> str:

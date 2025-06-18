@@ -18,11 +18,11 @@
 │                    ADMIN SERVICE (Data Owner)                   │
 ├─────────────────────────────────────────────────────────────────┤
 │  📊 Data Layer (All Tables)                                    │
-│  ├── coach-profiles-v1-dev                                     │
-│  ├── parent-enrollments-v1-dev                                 │
-│  ├── invitations-v1-dev                                        │
-│  ├── analytics-events-v1-dev                                   │
-│  └── audit-logs-v1-dev                                         │
+│  ├── coach-profilesdev                                     │
+│  ├── parent-enrollmentsdev                                 │
+│  ├── invitationsdev                                        │
+│  ├── analytics-eventsdev                                   │
+│  └── audit-logsdev                                         │
 ├─────────────────────────────────────────────────────────────────┤
 │  🔐 Business Logic Layer                                       │
 │  ├── Coach Management                                          │
@@ -51,9 +51,9 @@
 # ✅ ONLY admin service creates tables
 class AdminPortalService:
     def create_all_tables(self):
-        self.coach_profiles = Table("coach-profiles-v1-dev")       # No conflicts!
-        self.parent_enrollments = Table("parent-enrollments-v1-dev") # No conflicts!
-        self.invitations = Table("invitations-v1-dev")            # No conflicts!
+        self.coach_profiles = Table("coach-profilesdev")       # No conflicts!
+        self.parent_enrollments = Table("parent-enrollmentsdev") # No conflicts!
+        self.invitations = Table("invitationsdev")            # No conflicts!
 
 # ✅ NO MORE cleanup scripts needed!
 ```

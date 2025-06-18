@@ -77,14 +77,14 @@ Separate backend services for each user type:
 
 | Table | Owner | Access Pattern |
 |-------|-------|----------------|
-| `profiles-v3-{stage}` | Coach Portal | Coach: R/W, Parent: R, Admin: R/W |
-| `onboarding-sessions-v3-{stage}` | Coach Portal | Coach: R/W, Admin: R |
-| `parent-invitations-v3-{stage}` | Coach Portal | Coach: R/W, Parent: R, Admin: R |
-| `tsa-parent-enrollments-v3-{stage}` | Parent Portal | Parent: R/W, Coach: R, Admin: R |
-| `tsa-parent-documents-v3-{stage}` | Parent Portal | Parent: R/W, Admin: R |
-| `tsa-parent-scheduling-v3-{stage}` | Parent Portal | Parent: R/W, Coach: R/W, Admin: R |
-| `coach-invitations-v3-{stage}` | Admin Portal | Admin: R/W, Coach: R |
-| `admin-audit-logs-v3-{stage}` | Admin Portal | Admin: R/W |
+| `profiles{stage}` | Coach Portal | Coach: R/W, Parent: R, Admin: R/W |
+| `onboarding-sessions{stage}` | Coach Portal | Coach: R/W, Admin: R |
+| `parent-invitations{stage}` | Coach Portal | Coach: R/W, Parent: R, Admin: R |
+| `tsa-parent-enrollments{stage}` | Parent Portal | Parent: R/W, Coach: R, Admin: R |
+| `tsa-parent-documents{stage}` | Parent Portal | Parent: R/W, Admin: R |
+| `tsa-parent-scheduling{stage}` | Parent Portal | Parent: R/W, Coach: R/W, Admin: R |
+| `coach-invitations{stage}` | Admin Portal | Admin: R/W, Coach: R |
+| `admin-audit-logs{stage}` | Admin Portal | Admin: R/W |
 
 ### API Endpoints by Portal
 
@@ -156,9 +156,9 @@ Separate backend services for each user type:
    ```
 
 2. **Update table names** (tables will be renamed with `parent` prefix)
-   - `tsa-coach-enrollments-v3-dev` → `tsa-parent-enrollments-v3-dev`
-   - `tsa-coach-documents-v3-dev` → `tsa-parent-documents-v3-dev`
-   - `tsa-coach-scheduling-v3-dev` → `tsa-parent-scheduling-v3-dev`
+   - `tsa-coach-enrollmentsdev` → `tsa-parent-enrollmentsdev`
+   - `tsa-coach-documentsdev` → `tsa-parent-documentsdev`
+   - `tsa-coach-schedulingdev` → `tsa-parent-schedulingdev`
 
 3. **Deploy updated Coach Portal Service** (parent functionality removed)
    ```bash

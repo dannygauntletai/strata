@@ -79,8 +79,8 @@ class LlcIncorporationStack extends cdk.Stack {
                                     's3:ListBucket'
                                 ],
                                 resources: [
-                                    `arn:aws:s3:::tsa-coach-portal-v2-${stage}-*`,
-                                    `arn:aws:s3:::tsa-coach-portal-v2-${stage}-*/*`
+                                    `arn:aws:s3:::tsa-coach-portal${stage}-*`,
+                                    `arn:aws:s3:::tsa-coach-portal${stage}-*/*`
                                 ]
                             }),
                             // CloudWatch permissions for enhanced logging
@@ -114,7 +114,7 @@ class LlcIncorporationStack extends cdk.Stack {
             environment: {
                 STAGE: stage,
                 HOME: '/tmp',
-                SCREENSHOTS_BUCKET: `tsa-coach-portal-v2-${stage}-${cdk.Stack.of(this).account}`,
+                SCREENSHOTS_BUCKET: `tsa-coach-portal${stage}-${cdk.Stack.of(this).account}`,
                 AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',
                 PLAYWRIGHT_BROWSERS_PATH: '/tmp/.playwright',
                 // Browserbase configuration for remote browser automation

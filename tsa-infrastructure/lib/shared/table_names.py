@@ -70,7 +70,6 @@ class TableNameConfig:
             
             # ===== SYSTEM TABLES =====
             "sessions": self.get_table_name("sessions"),
-            "magic-links": self.get_table_name("tsa-magic-links"),  # Keep existing naming for this
             
             # ===== COACH-SPECIFIC TABLES =====
             "coach-onboarding-sessions": self.get_table_name("coach-onboarding-sessions"),
@@ -281,44 +280,50 @@ class TableNameConfig:
         return {**base_vars, **table_vars, **service_vars}
     
     def get_lambda_names(self) -> Dict[str, str]:
-        """Get standardized Lambda function names"""
+        """Get Lambda function names for the platform"""
         return {
+            # Auth service functions
+            'auth_magic_link': f'tsa-magic-link-{self.stage}',
+            'auth_verify_token': f'tsa-verify-token-{self.stage}',
+            
             # Admin service functions
-            "admin_main": f"tsa-admin-portal-{self.stage}",
-            "admin_invitations": f"tsa-admin-portal-{self.stage}-invitations",
-            "admin_audit_health": f"tsa-admin-portal-{self.stage}-audit-health",
-            "admin_coaches": f"tsa-admin-portal-{self.stage}-coaches",
+            'admin_coaches': f'tsa-admin-coaches-{self.stage}',
+            'admin_invitations': f'tsa-admin-invitations-{self.stage}',
+            'admin_audit': f'tsa-admin-audit-{self.stage}',
             
             # Coach service functions
-            "coach_onboard": f"tsa-coach-onboard-{self.stage}",
-            "coach_profile": f"tsa-coach-profile-{self.stage}",
-            "coach_events": f"tsa-coach-events-{self.stage}",
-            "coach_background": f"tsa-coach-background-{self.stage}",
-            "coach_eventbrite_oauth": f"tsa-coach-eventbrite-oauth-{self.stage}",
-            "coach_invitations": f"tsa-coach-invitations-{self.stage}",
+            'coach_events': f'tsa-coach-events-{self.stage}',
+            'coach_invitations': f'tsa-coach-invitations-{self.stage}',
+            'coach_onboard': f'tsa-coach-onboarding-{self.stage}',
+            'coach_profile': f'tsa-coach-profile-{self.stage}',
+            'coach_background': f'tsa-coach-background-{self.stage}',
+            'coach_eventbrite_oauth': f'tsa-coach-eventbrite-oauth-{self.stage}',
             
             # Parent service functions
-            "parent_enrollment": f"tsa-parent-enrollment-{self.stage}",
-            "parent_dashboard": f"tsa-parent-dashboard-{self.stage}",
-            "admissions_validate": f"tsa-admissions-validate-{self.stage}",
-            
-            # Auth service functions
-            "auth_magic_link": f"tsa-magic-link-{self.stage}",
-            "auth_verify_token": f"tsa-verify-token-{self.stage}",
+            'parent_enrollment': f'tsa-parent-enrollment-{self.stage}',
+            'parent_events': f'tsa-parent-events-{self.stage}',
+            'admissions_validate': f'tsa-admissions-validate-{self.stage}',
         }
     
     def get_api_names(self) -> Dict[str, str]:
-        """Get standardized API Gateway names"""
+        """Get API Gateway names for the platform"""
         return {
-            "admin_api": f"TSA Admin API - {self.stage}",
-            "coach_api": f"TSA Coach API - {self.stage}",
-            "parent_api": f"TSA Parent API - {self.stage}",
-            "auth_api": f"TSA Unified Passwordless Auth API - {self.stage}",
+            'auth': f'tsa-auth-api-{self.stage}',
+            'admin': f'tsa-admin-api-{self.stage}',
+            'coach': f'tsa-coach-api-{self.stage}',
+            'parent': f'tsa-parent-api-{self.stage}',
+            'coach_api': f'tsa-coach-api-{self.stage}',  # Keep for backward compatibility
+            'parent_api': f'tsa-parent-api-{self.stage}',  # Keep for backward compatibility
         }
     
     def get_log_group_names(self) -> Dict[str, str]:
         """Get standardized CloudWatch log group names"""
         return {
+            "admin": f"/aws/apigateway/tsa-admin-api-{self.stage}",
+            "coach": f"/aws/apigateway/tsa-coach-api-{self.stage}",
+            "parent": f"/aws/apigateway/tsa-parent-api-{self.stage}",
+            "auth": f"/aws/apigateway/tsa-passwordless-{self.stage}",
+            # Backward compatibility
             "admin_api": f"/aws/apigateway/tsa-admin-api-{self.stage}",
             "coach_api": f"/aws/apigateway/tsa-coach-api-{self.stage}",
             "parent_api": f"/aws/apigateway/tsa-parent-api-{self.stage}",

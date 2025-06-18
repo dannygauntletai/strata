@@ -8,6 +8,8 @@ import boto3
 from datetime import datetime, timedelta
 from typing import Dict, Any
 import logging
+from shared_config import get_config
+
 
 # Import shared utilities from consolidated shared layer
 try:
@@ -21,12 +23,14 @@ except ImportError as e:
 # AWS clients
 dynamodb = boto3.resource('dynamodb')
 
+config = get_config()
+
 def get_audit_tables():
     """Lazy initialization of audit tables"""
     return {
-        'audit_logs': dynamodb.Table(os.environ.get('TSA_AUDIT_LOGS_TABLE', 'admin-audit-logs-v1-dev')),
-        'invitations': dynamodb.Table(os.environ.get('TSA_INVITATIONS_TABLE', 'coach-invitations-dev')),
-        'profiles': dynamodb.Table(os.environ.get('TSA_PROFILES_TABLE', 'profiles-v1-dev'))
+        'audit_logs': dynamodb.Table(config.get_table_name('audit-logs')),
+        'invitations': dynamodb.Table(config.get_table_name('coach-invitations')),
+        'profiles': dynamodb.Table(config.get_table_name('profiles'))
     }
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

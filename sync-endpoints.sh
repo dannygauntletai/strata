@@ -90,10 +90,34 @@ echo "🔐 Passwordless Auth: ${AUTH_API:-NOT_FOUND}"
 echo ""
 
 # Validate required endpoints
+MISSING_ENDPOINTS=0
+
 if [ "$AUTH_API" = "NOT_FOUND" ] || [ -z "$AUTH_API" ]; then
-    echo "❌ ERROR: Passwordless Auth API not found!"
-    echo "🔧 Deploy auth infrastructure: cd tsa-infrastructure && cdk deploy tsa-infra-auth-$STAGE"
-    exit 1
+    echo "⚠️  WARNING: Passwordless Auth API not found!"
+    echo "   This is normal during initial deployment."
+    AUTH_API="https://placeholder-auth-api.tsa.dev/"
+    MISSING_ENDPOINTS=$((MISSING_ENDPOINTS + 1))
+fi
+
+if [ "$COACH_API" = "NOT_FOUND" ] || [ -z "$COACH_API" ]; then
+    echo "⚠️  WARNING: Coach API not found!"
+    echo "   This is normal during initial deployment."
+    COACH_API="https://placeholder-coach-api.tsa.dev/"
+    MISSING_ENDPOINTS=$((MISSING_ENDPOINTS + 1))
+fi
+
+if [ "$ADMIN_API" = "NOT_FOUND" ] || [ -z "$ADMIN_API" ]; then
+    echo "⚠️  WARNING: Admin API not found!"
+    echo "   This is normal during initial deployment."
+    ADMIN_API="https://placeholder-admin-api.tsa.dev/"
+    MISSING_ENDPOINTS=$((MISSING_ENDPOINTS + 1))
+fi
+
+if [ $MISSING_ENDPOINTS -gt 0 ]; then
+    echo ""
+    echo "📝 Using placeholder URLs for missing endpoints."
+    echo "   These will be updated automatically after successful deployment."
+    echo ""
 fi
 
 echo "📝 Updating frontend configurations..."

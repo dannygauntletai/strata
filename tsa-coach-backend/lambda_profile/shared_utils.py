@@ -7,7 +7,11 @@ import boto3
 import os
 from datetime import datetime
 from typing import Dict, Any, Optional, List
+from shared_config import get_config
 
+
+
+config = get_config()
 
 def create_response(status_code: int, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """Create standardized API response with CORS headers"""
@@ -379,7 +383,7 @@ def process_document_upload(file_data: bytes, enrollment_id: str, document_type:
         )
         
         # Store document metadata in DynamoDB
-        documents_table = get_dynamodb_table(os.environ.get('DOCUMENTS_TABLE', 'tsa-coach-documents-v1-dev'))
+        documents_table = get_dynamodb_table(config.get_env_vars('SERVICE')['DOCUMENTS_TABLE'], get_table_name('documents')))
         
         document_metadata = {
             'document_id': document_id,

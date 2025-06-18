@@ -87,7 +87,7 @@ pydantic==2.5.0  # For data validation
 
 // 1. Enrollments Table (EdFi Integration Ready)
 const enrollmentsTable = new dynamodb.Table(this, 'EnrollmentsTable', {
-  tableName: `tsa-parent-enrollments-v3-${stage}`,
+  tableName: `tsa-parent-enrollments${stage}`,
   partitionKey: { name: 'enrollment_id', type: dynamodb.AttributeType.STRING },
   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
   pointInTimeRecovery: true,
@@ -108,7 +108,7 @@ enrollmentsTable.addGlobalSecondaryIndex({
 
 // 2. Documents Table (EdFi Document Management)
 const documentsTable = new dynamodb.Table(this, 'DocumentsTable', {
-  tableName: `tsa-parent-documents-v3-${stage}`,
+  tableName: `tsa-parent-documents${stage}`,
   partitionKey: { name: 'document_id', type: dynamodb.AttributeType.STRING },
   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
   pointInTimeRecovery: true,
@@ -123,7 +123,7 @@ documentsTable.addGlobalSecondaryIndex({
 
 // 3. Scheduling Table
 const schedulingTable = new dynamodb.Table(this, 'SchedulingTable', {
-  tableName: `tsa-parent-scheduling-v3-${stage}`,
+  tableName: `tsa-parent-scheduling${stage}`,
   partitionKey: { name: 'schedule_id', type: dynamodb.AttributeType.STRING },
   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
   pointInTimeRecovery: true,
@@ -254,10 +254,10 @@ FRONTEND_URL=https://app.sportsacademy.school  # Single frontend for both roles
 ### Parent Enrollment Handler (Unified Frontend)
 ```bash
 # DynamoDB Tables
-ENROLLMENTS_TABLE=tsa-parent-enrollments-v3-dev
-DOCUMENTS_TABLE=tsa-parent-documents-v3-dev  
-SCHEDULING_TABLE=tsa-parent-scheduling-v3-dev
-PROFILES_TABLE=profiles-v3-dev
+ENROLLMENTS_TABLE=tsa-parent-enrollmentsdev
+DOCUMENTS_TABLE=tsa-parent-documentsdev  
+SCHEDULING_TABLE=tsa-parent-schedulingdev
+PROFILES_TABLE=profilesdev
 
 # SQLAlchemy Configuration
 SQLALCHEMY_DATABASE_URL=postgresql://username:password@host:5432/tsa_coach
@@ -277,8 +277,8 @@ STAGE=dev
 ### Parent Dashboard Handler (Unified Frontend)
 ```bash
 # DynamoDB
-PROFILES_TABLE=profiles-v3-dev
-ENROLLMENTS_TABLE=tsa-parent-enrollments-v3-dev
+PROFILES_TABLE=profilesdev
+ENROLLMENTS_TABLE=tsa-parent-enrollmentsdev
 
 # SQLAlchemy Configuration
 SQLALCHEMY_DATABASE_URL=postgresql://username:password@host:5432/tsa_coach
@@ -570,12 +570,12 @@ const corsOrigins = {
 
 **Coach Portal Service** (`tsa-coach-backend-dev`):
 - **API Gateway**: `https://deibk5wgx1.execute-api.us-east-2.amazonaws.com/prod/`
-- **Tables Created**: `profiles-v3-dev`, `parent-invitations-v3-dev`, `onboarding-sessions-v3-dev`
+- **Tables Created**: `profilesdev`, `parent-invitationsdev`, `onboarding-sessionsdev`
 - **Functionality**: Coach onboarding, parent invitation management, coach dashboard
 
 **Parent Portal Service** (`tsa-parent-backend-dev`):
 - **API Gateway**: `https://4ojhuzmaie.execute-api.us-east-2.amazonaws.com/prod/`
-- **Tables Created**: `tsa-parent-enrollments-v3-dev`, `tsa-parent-documents-v3-dev`, `tsa-parent-scheduling-v3-dev`
+- **Tables Created**: `tsa-parent-enrollmentsdev`, `tsa-parent-documentsdev`, `tsa-parent-schedulingdev`
 - **Functionality**: Parent enrollment, document management, unified dashboard, communication
 
 ### ✅ Architecture Benefits Achieved:

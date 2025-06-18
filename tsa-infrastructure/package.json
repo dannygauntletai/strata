@@ -1,0 +1,30 @@
+{
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "deploy:dev": "cdk deploy --all --require-approval never && cd .. && ./scripts/manage-ssm-parameters.sh dev us-east-2 sync",
+    "deploy:prod": "cdk deploy --all --require-approval never && cd .. && ./scripts/manage-ssm-parameters.sh prod us-east-2 sync",
+    "deploy:auth": "cdk deploy tsa-infra-auth-dev --require-approval never",
+    "deploy:data": "cdk deploy tsa-infra-data-dev --require-approval never",
+    "deploy:admin": "cdk deploy tsa-admin-backend-dev --require-approval never",
+    "deploy:coach": "cdk deploy tsa-coach-backend-dev --require-approval never",
+    "deploy:parent": "cdk deploy tsa-parent-backend-dev --require-approval never",
+    "deploy:frontend": "cdk deploy tsa-frontend-dev --require-approval never",
+    "deploy:networking": "cdk deploy tsa-infra-networking-dev --require-approval never",
+    "deploy:security": "cdk deploy tsa-infra-security-dev --require-approval never",
+    "deploy:all": "npm run deploy:networking && npm run deploy:security && npm run deploy:data && npm run deploy:auth && npm run deploy:admin && npm run deploy:coach",
+    "destroy:dev": "cd .. && ./scripts/manage-ssm-parameters.sh dev us-east-2 delete && cd tsa-infrastructure && cdk destroy --all --force",
+    "destroy:prod": "cd .. && ./scripts/manage-ssm-parameters.sh prod us-east-2 delete && cd tsa-infrastructure && cdk destroy --all --force",
+    "destroy:all": "cdk destroy --all --force",
+    "ssm:list": "cd .. && ./scripts/manage-ssm-parameters.sh dev us-east-2 list",
+    "ssm:sync": "cd .. && ./scripts/manage-ssm-parameters.sh dev us-east-2 sync",
+    "ssm:create": "../scripts/manage-ssm-parameters.sh dev us-east-2 create",
+    "ssm:update": "../scripts/manage-ssm-parameters.sh dev us-east-2 update",
+    "ssm:delete": "../scripts/manage-ssm-parameters.sh dev us-east-2 delete",
+    "validate:tables": "../scripts/validate-tables.sh dev us-east-2",
+    "validate:tables:staging": "../scripts/validate-tables.sh staging us-east-2",
+    "validate:tables:prod": "../scripts/validate-tables.sh prod us-east-2"
+  }
+} 

@@ -26,8 +26,8 @@ class SecurityStack(Stack):
         # Create IAM roles for Lambda functions
         self._create_iam_roles()
         
-        # Create security groups for database access
-        self._create_security_groups()
+        # Security groups are created in NetworkingStack, not here
+        # Remove _create_security_groups() to avoid conflicts
         
         # Create CloudFormation outputs
         self._create_outputs()
@@ -141,31 +141,7 @@ class SecurityStack(Stack):
             )
         )
         
-    def _create_security_groups(self):
-        """Create security groups for database access"""
-        
-        # Security group for Lambda functions
-        self.lambda_security_group = ec2.SecurityGroup(
-            self, "UnifiedPlatformLambdaSG",
-            vpc=self.vpc,
-            description="Security group for unified platform Lambda functions",
-            allow_all_outbound=True
-        )
-        
-        # Security group for RDS database  
-        self.database_security_group = ec2.SecurityGroup(
-            self, "UnifiedPlatformDatabaseSG",
-            vpc=self.vpc, 
-            description="Security group for unified platform PostgreSQL database",
-            allow_all_outbound=False
-        )
-        
-        # Allow Lambda functions to connect to database
-        self.database_security_group.add_ingress_rule(
-            peer=self.lambda_security_group,
-            connection=ec2.Port.tcp(5432),
-            description="Allow unified platform Lambda functions to connect to PostgreSQL"
-        )
+
         
     def _create_outputs(self):
         """Create CloudFormation outputs"""

@@ -373,40 +373,40 @@ class SendGridEmailService:
                         <p style="margin: 0; color: #6b7280; font-size: 14px;">
                             This invitation was sent to <strong>{email}</strong>
                         </p>
-            </div>
+                </div>
+                
+                </div>
+            </body>
+            </html>
+            """
+        
+            text_content = f"""
+                Coach Portal Invitation
             
-            </div>
-        </body>
-        </html>
-        """
-        
-        text_content = f"""
-            Coach Portal Invitation
-        
-            Invited to Join the Team!
-        
-            Join the coaching family and help develop the next generation of athletes.
-        
-            {f'Personal message: "{invitation["message"]}"' if invitation.get('message') else ''}
-        
-            Complete coach application: {invite_url}
-        
-            If the button doesn't work, copy and paste this link:
-            {invite_url}
+                Invited to Join the Team!
             
-            This invitation will expire in 7 days.
+                Join the coaching family and help develop the next generation of athletes.
             
-            This invitation was sent to {email}
+                {f'Personal message: "{invitation["message"]}"' if invitation.get('message') else ''}
+            
+                Complete coach application: {invite_url}
+            
+                If the button doesn't work, copy and paste this link:
+                {invite_url}
+                
+                This invitation will expire in 7 days.
+                
+                This invitation was sent to {email}
             """
             
             return self.send_email(
-            to_email=email,
-            subject=subject,
-            html_content=html_content,
-            text_content=text_content
-        )
+                to_email=email,
+                subject=subject,
+                html_content=html_content,
+                text_content=text_content
+            )
             
-    except Exception as e:
+        except Exception as e:
             logger.error(f"Error sending coach invitation email: {str(e)}")
             return {
                 'success': False,

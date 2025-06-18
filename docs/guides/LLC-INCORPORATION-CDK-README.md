@@ -163,7 +163,7 @@ aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/tsa-llc-incorp
 
 ### **S3 Screenshots**
 Screenshots are automatically saved during execution:
-- **Bucket**: `tsa-coach-portal-v2-{stage}-{account-id}`
+- **Bucket**: `tsa-coach-portal{stage}-{account-id}`
 - **Path**: `llc-incorporation-screenshots/{session-id}/`
 
 ### **Container Debugging**

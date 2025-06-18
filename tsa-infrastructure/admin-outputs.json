@@ -42,18 +42,18 @@
     "ExportsOutputRefPasswordlessAPIDeploymentStagev1F2978071648FD587": "v1",
     "PasswordlessAPIEndpointDC931873": "https://s4h51pa94g.execute-api.us-east-2.amazonaws.com/v1/",
     "UserPoolArn": "arn:aws:cognito-idp:us-east-2:164722634547:userpool/us-east-2_QGi1JHPFU",
-    "UserPoolDomainUrl": "https://tsa-unified-v1-dev.auth.us-east-2.amazoncognito.com"
+    "UserPoolDomainUrl": "https://tsa-unifieddev.auth.us-east-2.amazoncognito.com"
   },
   "tsa-admin-backend-dev": {
     "ExportsOutputRefAdminPortalServiceAdminPortalAPIDeploymentStageprodB7D4570B43FF046E": "prod",
-    "AdminPortalServiceDocumentsTableNameBA7A158F": "documents-v1-dev",
-    "AdminPortalServiceInvitationsTableName9FB36F06": "invitations-v1-dev",
-    "AdminPortalServiceEventsTableNameBD073FC1": "events-v1-dev",
-    "AdminPortalServiceUsersTableName0E71FFC7": "users-v1-dev",
-    "AdminPortalServiceEnrollmentsTableNameA3B14A1F": "enrollments-v1-dev",
+    "AdminPortalServiceDocumentsTableNameBA7A158F": "documentsdev",
+    "AdminPortalServiceInvitationsTableName9FB36F06": "invitationsdev",
+    "AdminPortalServiceEventsTableNameBD073FC1": "eventsdev",
+    "AdminPortalServiceUsersTableName0E71FFC7": "usersdev",
+    "AdminPortalServiceEnrollmentsTableNameA3B14A1F": "enrollmentsdev",
     "AdminPortalServiceAdminAPIUrl0F5A86A4": "https://xjw83vkgc4.execute-api.us-east-2.amazonaws.com/prod/",
     "AdminPortalServiceAdminPortalAPIEndpointCD77C31D": "https://xjw83vkgc4.execute-api.us-east-2.amazonaws.com/prod/",
-    "AdminPortalServiceAuditLogsTableName87D3E7E8": "audit-logs-v1-dev",
+    "AdminPortalServiceAuditLogsTableName87D3E7E8": "audit-logsdev",
     "ExportsOutputRefAdminPortalServiceAdminPortalAPI1F0D73691D72847A": "xjw83vkgc4"
   }
 }

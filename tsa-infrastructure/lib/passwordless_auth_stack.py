@@ -1,6 +1,7 @@
 """
 Passwordless Authentication Stack - Python Implementation
 Uses core AWS services for magic link email authentication
+JWT-based magic links - no DynamoDB storage required
 """
 import os
 import time
@@ -26,7 +27,7 @@ from .shared.table_names import get_resource_config
 
 
 class PasswordlessAuthStack(Stack):
-    """Python implementation of passwordless email authentication"""
+    """Python implementation of passwordless email authentication with JWT tokens"""
     
     def __init__(self, scope: Construct, construct_id: str, 
                  stage: str, domain_name: str = "sportsacademy.tech",
@@ -42,7 +43,7 @@ class PasswordlessAuthStack(Stack):
         
         # Create core authentication resources
         self._create_user_pool()
-        self._create_magic_link_storage()
+        self._create_jwt_secret()
         self._create_sendgrid_secret()
         self._create_lambda_functions()
         self._create_api_gateway()
@@ -123,43 +124,34 @@ class PasswordlessAuthStack(Stack):
             )
         )
     
-    def _create_magic_link_storage(self):
-        """Create or import DynamoDB table for magic link tokens"""
+    def _create_jwt_secret(self):
+        """Create or import JWT signing secret"""
         
-        table_name = self.table_config.get_table_name("tsa-magic-links")
+        # Create or import JWT secret for signing magic link tokens
+        secret_name = f"tsa-jwt-secret-{self.stage}"
         
         try:
-            # Try to import existing table
-            self.magic_links_table = dynamodb.Table.from_table_name(
-                self, "MagicLinksTable",
-                table_name=table_name
+            # Try to import existing secret
+            self.jwt_secret = secretsmanager.Secret.from_secret_name_v2(
+                self, "JWTSecret",
+                secret_name=secret_name
             )
-            print(f"✅ Imported existing DynamoDB table: {table_name}")
+            print(f"✅ Imported existing JWT secret: {secret_name}")
         except Exception:
-            # Create new table if import fails
-            self.magic_links_table = dynamodb.Table(
-                self, "MagicLinksTable",
-                table_name=table_name,
-                partition_key=dynamodb.Attribute(
-                    name="token_id",
-                    type=dynamodb.AttributeType.STRING
-                ),
-                billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-                time_to_live_attribute="expires_at",  # Auto-cleanup expired tokens
-                point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
-                    point_in_time_recovery_enabled=True
-                ),
-            )
-            
-            # Add GSI for email lookups (only for new tables)
-            self.magic_links_table.add_global_secondary_index(
-                index_name="email-index",
-                partition_key=dynamodb.Attribute(
-                    name="email",
-                    type=dynamodb.AttributeType.STRING
+            # Create new secret if import fails
+            self.jwt_secret = secretsmanager.Secret(
+                self, "JWTSecret",
+                secret_name=secret_name,
+                description="JWT signing secret for TSA magic links",
+                generate_secret_string=secretsmanager.SecretStringGenerator(
+                    secret_string_template='{"jwt_secret": "PLACEHOLDER_REPLACE_WITH_SECURE_KEY"}',
+                    generate_string_key="jwt_secret",
+                    exclude_characters=" %+~`#$&*()|[]{}:;<>?!'/\"\\",
+                    include_space=False,
+                    password_length=64  # Strong JWT secret
                 )
             )
-            print(f"✅ Created new DynamoDB table: {table_name}")
+            print(f"✅ Created new JWT secret: {secret_name}")
     
     def _create_sendgrid_secret(self):
         """Create or import the SendGrid API key secret"""
@@ -201,12 +193,13 @@ class PasswordlessAuthStack(Stack):
             "environment": {
                 "USER_POOL_ID": self.user_pool.user_pool_id,
                 "CLIENT_ID": self.user_pool_client.user_pool_client_id,
-                "MAGIC_LINKS_TABLE": self.magic_links_table.table_name,
                 "TSA_INVITATIONS_TABLE": self.table_config.get_table_name("coach-invitations"),  # Coach invitations table
                 "PARENT_INVITATIONS_TABLE": self.table_config.get_table_name("parent-invitations"),  # Parent invitations table
                 "FRONTEND_URL": self.frontend_url,
                 "ADMIN_FRONTEND_URL": f"https://admin.{self.domain_name}" if self.stage == 'prod' else "http://localhost:3001",
                 "LOG_LEVEL": "INFO",
+                # JWT configuration
+                "JWT_SECRET_ARN": self.jwt_secret.secret_arn,
                 # SendGrid configuration
                 "SENDGRID_SECRET_ARN": self.sendgrid_secret.secret_arn,
                 "SENDGRID_FROM_EMAIL": "no-reply@strata.school",  # Correct domain
@@ -258,12 +251,8 @@ class PasswordlessAuthStack(Stack):
     def _grant_lambda_permissions(self):
         """Grant necessary permissions to Lambda functions"""
         
-        # DynamoDB permissions - base table access
-        self.magic_links_table.grant_read_write_data(self.magic_link_function)
-        self.magic_links_table.grant_read_write_data(self.verify_token_function)
-        
-        # Additional DynamoDB permissions for GSI queries
-        dynamodb_gsi_policy = iam.PolicyStatement(
+        # DynamoDB permissions for invitations tables only
+        dynamodb_policy = iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
             actions=[
                 "dynamodb:Query",
@@ -274,17 +263,17 @@ class PasswordlessAuthStack(Stack):
                 "dynamodb:DeleteItem"
             ],
             resources=[
-                self.magic_links_table.table_arn,
-                f"{self.magic_links_table.table_arn}/index/*",  # GSI permissions
                 f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('coach-invitations')}",  # Coach invitations table
                 f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('coach-invitations')}/index/*",  # Coach invitations GSI
                 f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('parent-invitations')}",  # Parent invitations table
-                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('parent-invitations')}/index/*"  # Parent invitations GSI
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('parent-invitations')}/index/*",  # Parent invitations GSI
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('profiles')}",  # Profiles table
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{self.table_config.get_table_name('profiles')}/index/*"  # Profiles GSI
             ]
         )
         
-        self.magic_link_function.add_to_role_policy(dynamodb_gsi_policy)
-        self.verify_token_function.add_to_role_policy(dynamodb_gsi_policy)
+        self.magic_link_function.add_to_role_policy(dynamodb_policy)
+        self.verify_token_function.add_to_role_policy(dynamodb_policy)
         
         # Cognito permissions
         cognito_policy = iam.PolicyStatement(
@@ -304,6 +293,10 @@ class PasswordlessAuthStack(Stack):
         self.magic_link_function.add_to_role_policy(cognito_policy)
         self.verify_token_function.add_to_role_policy(cognito_policy)
         
+        # JWT secret permissions
+        self.jwt_secret.grant_read(self.magic_link_function)
+        self.jwt_secret.grant_read(self.verify_token_function)
+        
         # SendGrid secret permissions
         self.sendgrid_secret.grant_read(self.magic_link_function)
         self.sendgrid_secret.grant_read(self.verify_token_function)
@@ -322,166 +315,126 @@ class PasswordlessAuthStack(Stack):
         
         self.magic_link_function.add_to_role_policy(ssm_policy)
         self.verify_token_function.add_to_role_policy(ssm_policy)
-        
-        # Note: SES permissions removed - migrated to SendGrid
-        # SendGrid uses API key authentication, no AWS IAM permissions needed
     
     def _create_api_gateway(self):
-        """Create API Gateway for passwordless authentication"""
-        
-        # Create or import log group
-        log_group_name = f"/aws/apigateway/tsa-passwordless-{self.stage}"
-        
-        try:
-            # Try to import existing log group
-            log_group = logs.LogGroup.from_log_group_name(
-                self, "PasswordlessAPILogs",
-                log_group_name=log_group_name
-            )
-            print(f"✅ Imported existing log group: {log_group_name}")
-        except Exception:
-            # Create new log group if import fails
-            log_group = logs.LogGroup(
-                self, "PasswordlessAPILogs",
-                log_group_name=log_group_name,
-            )
-            print(f"✅ Created new log group: {log_group_name}")
+        """Create API Gateway for auth endpoints"""
         
         # Create API Gateway
         self.api = apigateway.RestApi(
             self, "PasswordlessAPI",
-            rest_api_name=self.table_config.get_api_names()["auth_api"],
-            description="Unified passwordless email authentication for all TSA user types (coach, parent, admin)",
+            rest_api_name=self.table_config.get_api_names()["auth"],
+            description="TSA Authentication API with JWT-based magic links",
             default_cors_preflight_options=apigateway.CorsOptions(
-                allow_origins=[
-                    f"https://coach.{self.domain_name}",
-                    f"https://app.{self.domain_name}",
-                    "http://localhost:3000",
-                    "http://localhost:3001",  # Admin frontend
-                    "http://localhost:5173",
-                    "http://localhost:8080",
-                ],
+                allow_origins=apigateway.Cors.ALL_ORIGINS,
                 allow_methods=apigateway.Cors.ALL_METHODS,
-                allow_headers=[
-                    "Content-Type",
-                    "X-Amz-Date", 
-                    "Authorization",
-                    "X-Api-Key",
-                    "X-Amz-Security-Token"
-                ]
+                allow_headers=["Content-Type", "X-Amz-Date", "Authorization", "X-Api-Key"]
             ),
             deploy_options=apigateway.StageOptions(
                 stage_name=self.stage,
-                access_log_destination=apigateway.LogGroupLogDestination(log_group),
-                access_log_format=apigateway.AccessLogFormat.json_with_standard_fields(
-                    caller=True,
-                    http_method=True,
-                    ip=True,
-                    protocol=True,
-                    request_time=True,
-                    resource_path=True,
-                    response_length=True,
-                    status=True,
-                    user=True
-                )
+                throttling_rate_limit=100,
+                throttling_burst_limit=200
             )
         )
         
-        # Create integrations
-        magic_link_integration = apigateway.LambdaIntegration(self.magic_link_function)
-        verify_token_integration = apigateway.LambdaIntegration(self.verify_token_function)
-        
-        # Auth endpoints
+        # Create auth resource
         auth_resource = self.api.root.add_resource("auth")
         
-        # Send magic link
+        # Magic link endpoint
         magic_link_resource = auth_resource.add_resource("magic-link")
-        magic_link_resource.add_method("POST", magic_link_integration)
+        magic_link_resource.add_method(
+            "POST",
+            apigateway.LambdaIntegration(self.magic_link_function),
+            authorization_type=apigateway.AuthorizationType.NONE
+        )
         
-        # Verify token  
+        # Token verification endpoint
         verify_resource = auth_resource.add_resource("verify")
-        verify_resource.add_method("POST", verify_token_integration)
+        verify_resource.add_method(
+            "POST",
+            apigateway.LambdaIntegration(self.verify_token_function),
+            authorization_type=apigateway.AuthorizationType.NONE
+        )
         
-        # Health check
+        # Health check endpoint
         health_resource = self.api.root.add_resource("health")
-        health_resource.add_method("GET", magic_link_integration)
+        health_resource.add_method(
+            "GET",
+            apigateway.LambdaIntegration(self.magic_link_function),
+            authorization_type=apigateway.AuthorizationType.NONE
+        )
         
-        # Grant API Gateway permissions after API is created
+        # Grant API Gateway permissions to invoke Lambda functions
         self._grant_api_gateway_permissions()
+        
+        # SSM parameter /tsa/{stage}/api-urls/auth managed externally
+        # See scripts/manage-ssm-parameters.sh for parameter management
+        # This prevents CloudFormation "parameter already exists" conflicts
     
     def _grant_api_gateway_permissions(self):
-        """Grant necessary permissions to API Gateway"""
+        """Grant API Gateway permissions to invoke Lambda functions"""
         
-        # Grant API Gateway invoke permissions
+        # Grant permissions for magic link handler
         self.magic_link_function.add_permission(
             "MagicLinkAPIGatewayInvoke",
             principal=iam.ServicePrincipal("apigateway.amazonaws.com"),
-            source_arn=f"{self.api.arn_for_execute_api()}/*/*/*"
+            source_arn=f"{self.api.arn_for_execute_api()}/*/*"
         )
         
+        # Grant permissions for verify token handler
         self.verify_token_function.add_permission(
             "VerifyTokenAPIGatewayInvoke",
             principal=iam.ServicePrincipal("apigateway.amazonaws.com"),
-            source_arn=f"{self.api.arn_for_execute_api()}/*/*/*"
+            source_arn=f"{self.api.arn_for_execute_api()}/*/*"
         )
     
     def _create_outputs(self):
         """Create CloudFormation outputs"""
         
+        # API Gateway URL
+        CfnOutput(
+            self, "PasswordlessApiUrl",
+            value=self.api.url,
+            description="TSA Passwordless Authentication API URL"
+        )
+        
+        # Cognito User Pool outputs
         CfnOutput(
             self, "UserPoolId",
             value=self.user_pool.user_pool_id,
-            description="Unified Cognito User Pool ID for all TSA user types (coach, parent, admin)",
-            export_name=f"{self.stage}-TSAUserPoolId"
+            description="Cognito User Pool ID"
         )
         
         CfnOutput(
-            self, "UserPoolClientId", 
+            self, "UserPoolClientId",
             value=self.user_pool_client.user_pool_client_id,
-            description="Unified Cognito User Pool Client ID for passwordless auth",
-            export_name=f"{self.stage}-TSAUserPoolClientId"
+            description="Cognito User Pool Client ID"
         )
         
         CfnOutput(
             self, "UserPoolArn",
             value=self.user_pool.user_pool_arn,
-            description="Unified Cognito User Pool ARN",
-            export_name=f"{self.stage}-TSAUserPoolArn"
+            description="Cognito User Pool ARN"
         )
         
-        # Export API URL
-        CfnOutput(
-            self, "PasswordlessApiUrl",
-            value=self.api.url,
-            description="Passwordless Auth API URL",
-            export_name=f"{self.stage}-TSAPasswordlessApiUrl"
-        )
-        
-        # Export Cognito domain URL
         CfnOutput(
             self, "UserPoolDomainUrl",
             value=f"https://{self.user_pool_domain.domain_name}.auth.{self.region}.amazoncognito.com",
-            description="Unified Cognito User Pool Domain URL",
-            export_name=f"{self.stage}-TSAUserPoolDomainUrl"
+            description="Cognito User Pool Domain URL"
         )
         
-        # Store API URL in SSM Parameter Store for frontend sync
-        ssm.StringParameter(
-            self, "PasswordlessAuthApiUrlParameter",
-            parameter_name=f"/tsa/{self.stage}/api-urls/auth",
-            string_value=self.api.url,
-            description=f"Auto-managed Passwordless Auth API URL for {self.stage} environment"
+        # Export values for other stacks
+        CfnOutput(
+            self, "PasswordlessAPIEndpoint",
+            value=self.api.url,
+            export_name=f"PasswordlessAPIEndpoint-{self.stage}"
         )
     
     def get_shared_resources(self) -> Dict[str, Any]:
-        """Get shared resources for use in other stacks"""
+        """Get shared resources for other stacks"""
         return {
             "user_pool": self.user_pool,
             "user_pool_client": self.user_pool_client,
-            "user_pool_id": self.user_pool.user_pool_id,
-            "user_pool_arn": self.user_pool.user_pool_arn,
-            "passwordless_api_url": self.api.url,
-            "magic_links_table": self.magic_links_table,
-            "sendgrid_secret": self.sendgrid_secret,
-            "sendgrid_secret_arn": self.sendgrid_secret.secret_arn,
+            "api": self.api,
+            "jwt_secret": self.jwt_secret,
+            "sendgrid_secret": self.sendgrid_secret
         } 

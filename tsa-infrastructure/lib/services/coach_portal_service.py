@@ -7,6 +7,7 @@ from aws_cdk import (
     CfnOutput,
     Fn,
     Stack,
+    RemovalPolicy,
     aws_lambda as lambda_,
     aws_apigateway as apigateway,
     aws_iam as iam,
@@ -18,7 +19,9 @@ from aws_cdk import (
 )
 from constructs import Construct
 from typing import Dict, Any
+from shared_config import get_config
 from ..shared.table_names import get_resource_config, get_table_iam_arns
+from ..shared.table_utils import get_or_create_table, get_standard_table_props
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,20 +38,19 @@ class CoachPortalService(Construct):
         self.stage = stage
         self.env_config = shared_resources.get("environment_config", {})
         
-        # Get centralized resource configuration
-        self.resource_config = get_resource_config(stage)
+        # Get centralized resource configuration using shared_config (single source of truth)
+        self.shared_config = get_config(stage)
+        self.table_config = self.shared_config
         
-        # Import shared table names from data infrastructure layer (single source of truth)
-        self.shared_table_names = {
-            "users": Fn.import_value(f"UnifiedPlatformUsersTable-{stage}"),
-            "profiles": Fn.import_value(f"UnifiedPlatformProfilesTable-{stage}"),
-            "coach-invitations": Fn.import_value(f"UnifiedPlatformCoachInvitationsTable-{stage}"),
-            "parent-invitations": Fn.import_value(f"UnifiedPlatformParentInvitationsTable-{stage}"),
-            "event-invitations": Fn.import_value(f"UnifiedPlatformEventInvitationsTable-{stage}"),
-            "enrollments": Fn.import_value(f"UnifiedPlatformEnrollmentsTable-{stage}"),
-            "events": Fn.import_value(f"UnifiedPlatformEventsTable-{stage}"),
-            "documents": Fn.import_value(f"UnifiedPlatformDocumentsTable-{stage}")
-        }
+        # Use shared_config for consistent naming across all services
+        self.get_table_name = self.shared_config.get_table_name
+        self.get_lambda_names = lambda: self.shared_config.get_lambda_names()
+        self.get_api_names = lambda: self.shared_config.get_api_names()
+        self.get_log_group_names = lambda: self.shared_config.get_log_group_names()
+        self.get_service_environment_variables = self.shared_config.get_env_vars
+        
+        # Get shared table names from shared_config (no CloudFormation imports needed)
+        self.shared_table_names = self.shared_config.get_all_table_names()
         
         # Create coach-specific resources
         self._create_lambda_layer()
@@ -67,17 +69,62 @@ class CoachPortalService(Construct):
         )
         
     def _create_coach_specific_tables(self):
-        """Create coach-specific tables only (shared tables owned by admin backend)"""
+        """Import shared tables from data stack and create coach-specific tables directly"""
+        
+        # Use existing shared_table_names that are already defined in constructor
+        # (These come from CloudFormation imports from the data stack)
+        
+        # Import shared tables using table names from data stack
+        try:
+            self.users_table = dynamodb.Table.from_table_name(
+                self, "ImportedUsersTable",
+                table_name=self.shared_table_names["users"]
+            )
+            self.profiles_table = dynamodb.Table.from_table_name(
+                self, "ImportedProfilesTable",
+                table_name=self.shared_table_names["profiles"]
+            )
+            self.coach_invitations_table = dynamodb.Table.from_table_name(
+                self, "ImportedCoachInvitationsTable",
+                table_name=self.shared_table_names["coach-invitations"]
+            )
+            self.parent_invitations_table = dynamodb.Table.from_table_name(
+                self, "ImportedParentInvitationsTable",
+                table_name=self.shared_table_names["parent-invitations"]
+            )
+            self.event_invitations_table = dynamodb.Table.from_table_name(
+                self, "ImportedEventInvitationsTable",
+                table_name=self.shared_table_names["event-invitations"]
+            )
+            self.enrollments_table = dynamodb.Table.from_table_name(
+                self, "ImportedEnrollmentsTable",
+                table_name=self.shared_table_names["enrollments"]
+            )
+            self.events_table = dynamodb.Table.from_table_name(
+                self, "ImportedEventsTable",
+                table_name=self.shared_table_names["events"]
+            )
+            self.documents_table = dynamodb.Table.from_table_name(
+                self, "ImportedDocumentsTable",
+                table_name=self.shared_table_names["documents"]
+            )
+        except Exception as e:
+            logger.warning(f"Could not import shared tables from data stack: {e}")
+        
+        # ========================================
+        # COACH-SPECIFIC TABLES (Direct Creation)
+        # ========================================
         
         # Coach onboarding sessions table (temporary data)
         self.onboarding_table = dynamodb.Table(
             self, "CoachOnboardingSessions",
-            table_name=self.resource_config.get_table_name("coach-onboarding-sessions"),
+            table_name=self.get_table_name("coach-onboarding-sessions"),
             partition_key=dynamodb.Attribute(
                 name="session_id",
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
             time_to_live_attribute="expires_at",
             point_in_time_recovery=True
         )
@@ -85,12 +132,13 @@ class CoachPortalService(Construct):
         # Background checks table
         self.background_checks_table = dynamodb.Table(
             self, "BackgroundChecksTable",
-            table_name=self.resource_config.get_table_name("background-checks"),
+            table_name=self.get_table_name("background-checks"),
             partition_key=dynamodb.Attribute(
                 name="check_id",
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
             point_in_time_recovery=True
         )
         
@@ -106,7 +154,7 @@ class CoachPortalService(Construct):
         # Legal requirements table
         self.legal_requirements_table = dynamodb.Table(
             self, "LegalRequirementsTable",
-            table_name=self.resource_config.get_table_name("legal-requirements"),
+            table_name=self.get_table_name("legal-requirements"),
             partition_key=dynamodb.Attribute(
                 name="coach_id",
                 type=dynamodb.AttributeType.STRING
@@ -116,34 +164,33 @@ class CoachPortalService(Construct):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
             point_in_time_recovery=True
         )
-        
-        # All shared tables are imported from data infrastructure layer above
-        
-        # All shared tables imported from data infrastructure layer above
         
         # Eventbrite configuration table (coach-specific)
         self.eventbrite_config_table = dynamodb.Table(
             self, "EventbriteConfigTable",
-            table_name=self.resource_config.get_table_name("eventbrite-config"),
+            table_name=self.get_table_name("eventbrite-config"),
             partition_key=dynamodb.Attribute(
                 name="coach_id",
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
             point_in_time_recovery=True
         )
         
         # Event attendees table (synced from Eventbrite)
         self.event_attendees_table = dynamodb.Table(
             self, "EventAttendeesTable",
-            table_name=self.resource_config.get_table_name("event-attendees"),
+            table_name=self.get_table_name("event-attendees"),
             partition_key=dynamodb.Attribute(
                 name="attendee_id",
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
             point_in_time_recovery=True
         )
         
@@ -172,7 +219,8 @@ class CoachPortalService(Construct):
         # Import auth service user pool ID for user registration
         auth_user_pool_id = None
         try:
-            auth_user_pool_id = Fn.import_value(f"{self.stage}-TSAUserPoolId")
+            # Import from security stack (UnifiedPlatformUserPoolId-{stage})
+            auth_user_pool_id = Fn.import_value(f"UnifiedPlatformUserPoolId-{self.stage}")
         except Exception:
             logger.warning(f"Could not import auth service user pool ID for {self.stage}")
         
@@ -181,7 +229,7 @@ class CoachPortalService(Construct):
             "runtime": lambda_.Runtime.PYTHON_3_9,
             "layers": [self.coach_layer],
             "environment": {
-                **self.resource_config.get_service_environment_variables("coach"),
+                **self.get_service_environment_variables("coach"),
                 
                 # Shared table names from data infrastructure layer (single source of truth)
                 "USERS_TABLE": self.shared_table_names["users"],
@@ -236,7 +284,7 @@ class CoachPortalService(Construct):
         # Coach onboarding function
         self.onboarding_function = lambda_.Function(
             self, "OnboardingHandler",
-            function_name=self.resource_config.get_lambda_names()["coach_onboard"],
+            function_name=self.get_lambda_names()["coach_onboard"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_onboard"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -245,7 +293,7 @@ class CoachPortalService(Construct):
         # Coach profile function
         self.profile_function = lambda_.Function(
             self, "ProfileHandler", 
-            function_name=self.resource_config.get_lambda_names()["coach_profile"],
+            function_name=self.get_lambda_names()["coach_profile"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_profile"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -254,7 +302,7 @@ class CoachPortalService(Construct):
         # Coach events function
         self.events_function = lambda_.Function(
             self, "EventsHandler",
-            function_name=self.resource_config.get_lambda_names()["coach_events"],
+            function_name=self.get_lambda_names()["coach_events"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_events"),
             handler="events_handler.lambda_handler",
             **lambda_config
@@ -263,7 +311,7 @@ class CoachPortalService(Construct):
         # Background check function
         self.background_function = lambda_.Function(
             self, "BackgroundHandler",
-            function_name=self.resource_config.get_lambda_names()["coach_background"],
+            function_name=self.get_lambda_names()["coach_background"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_background_check"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -272,7 +320,7 @@ class CoachPortalService(Construct):
         # Eventbrite OAuth function
         self.eventbrite_oauth_function = lambda_.Function(
             self, "EventbriteOAuthHandler",
-            function_name=self.resource_config.get_lambda_names()["coach_eventbrite_oauth"],
+            function_name=self.get_lambda_names()["coach_eventbrite_oauth"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_eventbrite_oauth"),
             handler="handler.lambda_handler",
             **lambda_config
@@ -281,7 +329,7 @@ class CoachPortalService(Construct):
         # Invitations function - handles parent invitations from coaches
         self.invitations_function = lambda_.Function(
             self, "InvitationsHandler",
-            function_name=self.resource_config.get_lambda_names()["coach_invitations"],
+            function_name=self.get_lambda_names()["coach_invitations"],
             code=lambda_.Code.from_asset("../tsa-coach-backend/lambda_invitations"),
             handler="invitations_handler.lambda_handler",  # RESTORED: Use full handler with Lambda layer
             **lambda_config
@@ -323,7 +371,7 @@ class CoachPortalService(Construct):
             # Grant permissions to shared tables from centralized configuration
             shared_table_arns = []
             for table_key in ["users", "profiles", "coach-invitations", "parent-invitations", "event-invitations", "enrollments", "events", "documents"]:
-                table_name = self.resource_config.get_table_name(table_key)
+                table_name = self.get_table_name(table_key)
                 shared_table_arns.extend([
                     f"arn:aws:dynamodb:*:*:table/{table_name}",
                     f"arn:aws:dynamodb:*:*:table/{table_name}/index/*"
@@ -432,17 +480,26 @@ class CoachPortalService(Construct):
     def _create_api_gateway(self):
         """Create API Gateway with standardized naming"""
         
-        # Create CloudWatch log group for API Gateway
-        self.api_log_group = logs.LogGroup(
-            self, "CoachAPILogGroup",
-            log_group_name=self.resource_config.get_log_group_names()["coach_api"],
-            retention=logs.RetentionDays.ONE_MONTH
-        )
+        # Create CloudWatch log group for API Gateway (import existing if present)
+        log_group_name = self.get_log_group_names()["coach"]
+        try:
+            self.api_log_group = logs.LogGroup.from_log_group_name(
+                self, "CoachAPILogGroup",
+                log_group_name=log_group_name
+            )
+            print(f"✅ Imported existing coach log group: {log_group_name}")
+        except Exception:
+            self.api_log_group = logs.LogGroup(
+                self, "CoachAPILogGroup",
+                log_group_name=log_group_name,
+                retention=logs.RetentionDays.ONE_MONTH
+            )
+            print(f"🆕 Created new coach log group: {log_group_name}")
         
         # Create API Gateway
         self.api = apigateway.RestApi(
             self, "CoachPortalAPI",
-            rest_api_name=self.resource_config.get_api_names()["coach_api"],
+            rest_api_name=self.get_api_names()["coach"],
             description=f"TSA Coach Portal API - {self.stage}",
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=self.env_config.get("cors_origins", {}).get("unified", [
@@ -730,12 +787,9 @@ class CoachPortalService(Construct):
         )
         
         # Store coach API URL for frontend sync scripts
-        ssm.StringParameter(
-            self, "CoachAPIEndpointParameter",
-            parameter_name=f"/tsa/{self.stage}/api-urls/coach",
-            string_value=self.api.url,
-            description=f"Coach Portal API endpoint for {self.stage} environment"
-        )
+        # SSM parameter /tsa/{stage}/api-urls/coach managed externally
+        # See scripts/manage-ssm-parameters.sh for parameter management
+        # This prevents CloudFormation "parameter already exists" conflicts
         
     @property
     def api_url(self) -> str:

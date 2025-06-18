@@ -28,28 +28,38 @@ get_current_time = get_current_timestamp
 standardize_error_response = format_error_response
 validate_email = validate_email_format
 
-# Define get_table_name function for table name resolution
+# Define get_table_name function for table name resolution using shared config
 def get_table_name(table_key: str) -> str:
-    """Get table name from environment variables with fallback"""
+    """Get table name using shared configuration (no hardcoded fallbacks)"""
+    try:
+        from shared_config import get_config
+        config = get_config()
+        return config.get_table_name(table_key)
+    except ImportError:
+        # Fallback to environment variables only if shared_config not available
     import os
     
-    # Standard table name mapping with environment variable fallback
-    table_mapping = {
-        'profiles': os.environ.get('PROFILES_TABLE', 'profiles-dev'),
-        'users': os.environ.get('USERS_TABLE', 'users-dev'),
-        'invitations': os.environ.get('INVITATIONS_TABLE', 'invitations-dev'),
-        'event_invitations': os.environ.get('EVENT_INVITATIONS_TABLE', 'event-invitations-dev'),
-        'events': os.environ.get('EVENTS_TABLE', 'events-dev'),
-        'enrollments': os.environ.get('ENROLLMENTS_TABLE', 'enrollments-dev'),
-        'documents': os.environ.get('DOCUMENTS_TABLE', 'documents-dev'),
-        'onboarding_sessions': os.environ.get('ONBOARDING_SESSIONS_TABLE', 'coach-onboarding-sessions-dev'),
-        'background_checks': os.environ.get('BACKGROUND_CHECKS_TABLE', 'background-checks-dev'),
-        'legal_requirements': os.environ.get('LEGAL_REQUIREMENTS_TABLE', 'legal-requirements-dev'),
-        'eventbrite_config': os.environ.get('EVENTBRITE_CONFIG_TABLE', 'eventbrite-config-dev'),
-        'event_attendees': os.environ.get('EVENT_ATTENDEES_TABLE', 'event-attendees-dev'),
-    }
-    
-    return table_mapping.get(table_key, f"{table_key}-dev")
+        # Environment variable mapping (no hardcoded defaults)
+        env_var_mapping = {
+            'profiles': 'PROFILES_TABLE',
+            'users': 'USERS_TABLE', 
+            'invitations': 'INVITATIONS_TABLE',
+            'event_invitations': 'EVENT_INVITATIONS_TABLE',
+            'events': 'EVENTS_TABLE',
+            'enrollments': 'ENROLLMENTS_TABLE',
+            'documents': 'DOCUMENTS_TABLE',
+            'onboarding_sessions': 'ONBOARDING_SESSIONS_TABLE',
+            'background_checks': 'BACKGROUND_CHECKS_TABLE',
+            'legal_requirements': 'LEGAL_REQUIREMENTS_TABLE',
+            'eventbrite_config': 'EVENTBRITE_CONFIG_TABLE',
+            'event_attendees': 'EVENT_ATTENDEES_TABLE',
+        }
+        
+        env_var = env_var_mapping.get(table_key)
+        if env_var and os.environ.get(env_var):
+            return os.environ[env_var]
+        else:
+            raise ValueError(f"Table name for '{table_key}' not found in environment or shared config")
 
 # Make generate_id more generic
 def generate_id(prefix: str = "item") -> str:

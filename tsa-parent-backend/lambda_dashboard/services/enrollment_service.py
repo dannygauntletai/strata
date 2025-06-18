@@ -5,7 +5,11 @@ Handles parent enrollment operations with proper data access patterns
 from typing import Dict, Any, List
 from tsa_shared import get_table, UserIdentifier
 import os
+from shared_config import get_config
 
+
+
+config = get_config()
 
 class EnrollmentService:
     """Service for parent enrollment business logic"""
@@ -14,7 +18,7 @@ class EnrollmentService:
     def get_parent_enrollments(parent_email: str) -> List[Dict[str, Any]]:
         """Get all enrollments for parent using proper GSI lookup"""
         try:
-            table = get_table(os.environ.get('ENROLLMENTS_TABLE', 'tsa-coach-enrollments-v1-dev'))
+            table = get_table(config.get_env_vars('SERVICE')['ENROLLMENTS_TABLE'], get_table_name('enrollments')))
             
             # Use GSI for efficient lookup instead of scanning
             response = table.query(
@@ -63,7 +67,7 @@ class EnrollmentService:
     def get_enrollment_by_id(enrollment_id: str) -> Dict[str, Any]:
         """Get specific enrollment by ID"""
         try:
-            table = get_table(os.environ.get('ENROLLMENTS_TABLE', 'tsa-coach-enrollments-v1-dev'))
+            table = get_table(config.get_env_vars('SERVICE')['ENROLLMENTS_TABLE'], get_table_name('enrollments')))
             
             response = table.get_item(Key={'enrollment_id': enrollment_id})
             return response.get('Item', {})

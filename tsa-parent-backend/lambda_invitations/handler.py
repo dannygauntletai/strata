@@ -9,6 +9,8 @@ import boto3
 import uuid
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
+from shared_config import get_config
+
 
 # Import shared utilities
 from shared_utils import (
@@ -23,6 +25,8 @@ from shared_utils import (
     handle_cors_preflight
 )
 
+
+config = get_config()
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for parent invitation requests"""
@@ -96,8 +100,8 @@ def create_parent_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         if not validate_email_format(body['parent_email']):
             return create_response(400, {'error': 'Invalid email format'}, event)
         
-        parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
-        profiles_table = get_dynamodb_table(os.environ.get('PROFILES_TABLE', 'profiles-v1-dev'))
+        parent_invitations_table = get_dynamodb_table(config.get_table_name('parent-invitations'))
+        profiles_table = get_dynamodb_table(config.get_table_name('profiles'))
         
         # Check if this is a development environment
         stage = os.environ.get('STAGE', 'dev')
@@ -216,7 +220,7 @@ def send_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         if not validation['valid']:
             return create_response(400, {'error': validation['error']}, event)
         
-        parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
+        parent_invitations_table = get_dynamodb_table(config.get_table_name('parent-invitations'))
         
         sent_count = 0
         failed_count = 0
@@ -340,7 +344,7 @@ def send_bulk_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
                         
                         if email_sent:
                             # Update status to sent
-                            parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
+                            parent_invitations_table = get_dynamodb_table(config.get_env_vars('SERVICE')['PARENT_INVITATIONS_TABLE'], get_table_name('parent-invitations')))
                             parent_invitations_table.update_item(
                                 Key={'invitation_id': invitation_data['invitation_id']},
                                 UpdateExpression='SET #status = :status, sent_at = :sent_at, updated_at = :updated_at',
@@ -388,7 +392,7 @@ def send_parent_invitation_email(invitation: Dict[str, Any]) -> bool:
 def validate_invitation_token(token: str, event: Dict[str, Any]) -> Dict[str, Any]:
     """Validate invitation token and return invitation details"""
     try:
-        parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
+        parent_invitations_table = get_dynamodb_table(config.get_env_vars('SERVICE')['PARENT_INVITATIONS_TABLE'], get_table_name('parent-invitations')))
         
         # Search for invitation by token
         response = parent_invitations_table.scan(
@@ -438,7 +442,7 @@ def validate_invitation_token(token: str, event: Dict[str, Any]) -> Dict[str, An
 def get_parent_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
     """Get invitation details by ID"""
     try:
-        parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
+        parent_invitations_table = get_dynamodb_table(config.get_env_vars('SERVICE')['PARENT_INVITATIONS_TABLE'], get_table_name('parent-invitations')))
         
         response = parent_invitations_table.get_item(Key={'invitation_id': invitation_id})
         
@@ -456,7 +460,7 @@ def get_parent_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str
 def list_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
     """List all parent invitations"""
     try:
-        parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
+        parent_invitations_table = get_dynamodb_table(config.get_env_vars('SERVICE')['PARENT_INVITATIONS_TABLE'], get_table_name('parent-invitations')))
         
         response = parent_invitations_table.scan()
         invitations = response.get('Items', [])
@@ -474,7 +478,7 @@ def list_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
 def resend_parent_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
     """Resend a parent invitation"""
     try:
-        parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
+        parent_invitations_table = get_dynamodb_table(config.get_env_vars('SERVICE')['PARENT_INVITATIONS_TABLE'], get_table_name('parent-invitations')))
         
         # Get invitation
         response = parent_invitations_table.get_item(Key={'invitation_id': invitation_id})
@@ -508,7 +512,7 @@ def update_parent_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[
     """Update parent invitation"""
     try:
         body = parse_event_body(event)
-        parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
+        parent_invitations_table = get_dynamodb_table(config.get_env_vars('SERVICE')['PARENT_INVITATIONS_TABLE'], get_table_name('parent-invitations')))
         
         # Update invitation
         parent_invitations_table.update_item(
@@ -531,7 +535,7 @@ def update_parent_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[
 def delete_parent_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
     """Delete parent invitation"""
     try:
-        parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
+        parent_invitations_table = get_dynamodb_table(config.get_env_vars('SERVICE')['PARENT_INVITATIONS_TABLE'], get_table_name('parent-invitations')))
         
         parent_invitations_table.delete_item(Key={'invitation_id': invitation_id})
         

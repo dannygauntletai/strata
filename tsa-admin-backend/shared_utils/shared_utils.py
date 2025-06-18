@@ -56,8 +56,11 @@ def parse_event_body(event: Dict[str, Any]) -> Dict[str, Any]:
 def log_admin_action(admin_user_id: str, action: str, details: Dict[str, Any]) -> None:
     """Log admin action to audit table for compliance and monitoring"""
     try:
+        from shared_config import get_config
+        config = get_config()
+        
         dynamodb = boto3.resource('dynamodb')
-        audit_table = dynamodb.Table(os.environ.get('TSA_AUDIT_LOGS_TABLE', 'admin-audit-logs-v1-dev'))
+        audit_table = dynamodb.Table(config.get_table_name('audit-logs'))
         
         log_entry = {
             'log_id': str(uuid.uuid4()),

@@ -75,7 +75,7 @@ class MigrationStack(Stack):
         # 1. Schema Creation Lambda
         self.schema_migration_function = lambda_.Function(
             self, "SchemaMigrationFunction",
-            function_name=f"tsa-schema-migration-v2-{self.stage}",
+            function_name=f"tsa-schema-migration{self.stage}",
             code=lambda_.Code.from_asset("lambda_migrations/schema_creator"),
             handler="handler.lambda_handler",
             description="Creates PostgreSQL schema for EdFi and OneRoster compliance",
@@ -85,7 +85,7 @@ class MigrationStack(Stack):
         # 2. Data Migration Lambda
         self.data_migration_function = lambda_.Function(
             self, "DataMigrationFunction", 
-            function_name=f"tsa-data-migration-v2-{self.stage}",
+            function_name=f"tsa-data-migration{self.stage}",
             code=lambda_.Code.from_asset("lambda_migrations/data_migrator"),
             handler="handler.lambda_handler",
             description="Migrates DynamoDB profiles to PostgreSQL users table",
@@ -138,13 +138,13 @@ class MigrationStack(Stack):
         # Create log groups
         logs.LogGroup(
             self, "SchemaMigrationLogs",
-            log_group_name=f"/aws/lambda/tsa-schema-migration-v2-{self.stage}",
+            log_group_name=f"/aws/lambda/tsa-schema-migration{self.stage}",
             retention=logs.RetentionDays.ONE_WEEK
         )
         
         logs.LogGroup(
             self, "DataMigrationLogs", 
-            log_group_name=f"/aws/lambda/tsa-data-migration-v2-{self.stage}",
+            log_group_name=f"/aws/lambda/tsa-data-migration{self.stage}",
             retention=logs.RetentionDays.ONE_WEEK
         )
         

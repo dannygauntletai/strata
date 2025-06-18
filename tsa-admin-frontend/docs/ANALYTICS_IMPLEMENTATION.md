@@ -257,11 +257,11 @@ cdk deploy tsa-admin-backend-dev
 ```
 
 2. **Verify Tables Created**:
-   - analytics-events-v1-dev
-   - analytics-sessions-v1-dev
-   - utm-campaigns-v1-dev
-   - attribution-models-v1-dev
-   - custom-reports-v1-dev
+   - analytics-eventsdev
+   - analytics-sessionsdev
+   - utm-campaignsdev
+   - attribution-modelsdev
+   - custom-reportsdev
 
 3. **Check Lambda Functions**:
    - Admin handler with analytics routes
@@ -277,12 +277,12 @@ The enhanced analytics page is automatically deployed with the existing admin fr
 
 Backend Lambda functions require:
 ```
-TSA_ANALYTICS_EVENTS_TABLE=analytics-events-v1-dev
-TSA_ANALYTICS_SESSIONS_TABLE=analytics-sessions-v1-dev
-TSA_UTM_CAMPAIGNS_TABLE=utm-campaigns-v1-dev
-TSA_ATTRIBUTION_MODELS_TABLE=attribution-models-v1-dev
-TSA_CUSTOM_REPORTS_TABLE=custom-reports-v1-dev
-TSA_ANALYTICS_STREAM_NAME=analytics-stream-v1-dev
+TSA_ANALYTICS_EVENTS_TABLE=analytics-eventsdev
+TSA_ANALYTICS_SESSIONS_TABLE=analytics-sessionsdev
+TSA_UTM_CAMPAIGNS_TABLE=utm-campaignsdev
+TSA_ATTRIBUTION_MODELS_TABLE=attribution-modelsdev
+TSA_CUSTOM_REPORTS_TABLE=custom-reportsdev
+TSA_ANALYTICS_STREAM_NAME=analytics-streamdev
 ```
 
 #### Frontend Configuration
@@ -445,7 +445,7 @@ curl -X POST https://api.example.com/admin/utm/build \
 
 ```bash
 # Check DynamoDB items
-aws dynamodb scan --table-name analytics-events-v1-dev --limit 5
+aws dynamodb scan --table-name analytics-eventsdev --limit 5
 
 # Check Lambda logs
 aws logs tail /aws/lambda/admin-backend-dev --follow

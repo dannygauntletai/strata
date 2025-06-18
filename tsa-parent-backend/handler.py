@@ -12,6 +12,8 @@ import boto3
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
+from shared_config import get_config
+
 
 # Import shared utilities
 from shared_utils import (
@@ -36,6 +38,8 @@ except ImportError:
     print("Warning: student_creation module not available")
     STUDENT_CREATION_AVAILABLE = False
 
+
+config = get_config()
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for parent enrollment operations"""
@@ -265,7 +269,7 @@ def create_student_records_sync(enrollment_data: Dict[str, Any]) -> Dict[str, An
 def update_enrollment_with_student_info(enrollment_id: str, student_creation_result: Dict[str, Any]) -> None:
     """Update enrollment record with student creation information"""
     try:
-        enrollments_table = get_dynamodb_table(os.environ.get('ENROLLMENTS_TABLE', 'tsa-coach-enrollments-v1-dev'))
+        enrollments_table = get_dynamodb_table(config.get_env_vars('SERVICE')['ENROLLMENTS_TABLE'], get_table_name('enrollments')))
         
         # Update enrollment with student record information
         update_expression = 'SET student_records = :records, updated_at = :updated'
@@ -469,7 +473,7 @@ def validate_invitation_with_coach_api(invitation_token: str) -> Dict[str, Any]:
     """Validate invitation token directly with DynamoDB instead of API call"""
     try:
         # Use DynamoDB directly instead of HTTP API call
-        parent_invitations_table = get_dynamodb_table(os.environ.get('PARENT_INVITATIONS_TABLE', 'parent-invitations-v1-dev'))
+        parent_invitations_table = get_dynamodb_table(config.get_env_vars('SERVICE')['PARENT_INVITATIONS_TABLE'], get_table_name('parent-invitations')))
         
         # Query invitation by token
         response = parent_invitations_table.scan(
@@ -511,7 +515,7 @@ def validate_invitation_with_coach_api(invitation_token: str) -> Dict[str, Any]:
 def check_existing_enrollment(invitation_token: str) -> Dict[str, Any]:
     """Check if enrollment already exists for this invitation"""
     try:
-        enrollments_table = get_dynamodb_table(os.environ.get('ENROLLMENTS_TABLE', 'tsa-coach-enrollments-v1-dev'))
+        enrollments_table = get_dynamodb_table(config.get_env_vars('SERVICE')['ENROLLMENTS_TABLE'], get_table_name('enrollments')))
         
         # Query by invitation token
         response = enrollments_table.scan(
@@ -533,7 +537,7 @@ def check_existing_enrollment(invitation_token: str) -> Dict[str, Any]:
 def create_enrollment_record(invitation_data: Dict[str, Any], parent_email: str, context: Any) -> Dict[str, Any]:
     """Create new enrollment record"""
     try:
-        enrollments_table = get_dynamodb_table(os.environ.get('ENROLLMENTS_TABLE', 'tsa-coach-enrollments-v1-dev'))
+        enrollments_table = get_dynamodb_table(config.get_env_vars('SERVICE')['ENROLLMENTS_TABLE'], get_table_name('enrollments')))
         
         # Generate enrollment ID
         enrollment_id = generate_enrollment_id()
@@ -572,7 +576,7 @@ def create_enrollment_record(invitation_data: Dict[str, Any], parent_email: str,
 def get_enrollment_by_id(enrollment_id: str) -> Dict[str, Any]:
     """Get enrollment record by ID"""
     try:
-        enrollments_table = get_dynamodb_table(os.environ.get('ENROLLMENTS_TABLE', 'tsa-coach-enrollments-v1-dev'))
+        enrollments_table = get_dynamodb_table(config.get_env_vars('SERVICE')['ENROLLMENTS_TABLE'], get_table_name('enrollments')))
         
         response = enrollments_table.get_item(Key={'enrollment_id': enrollment_id})
         return response.get('Item')
@@ -585,7 +589,7 @@ def get_enrollment_by_id(enrollment_id: str) -> Dict[str, Any]:
 def update_enrollment_step(enrollment: Dict[str, Any], step_number: int, step_data: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Update enrollment with completed step data"""
     try:
-        enrollments_table = get_dynamodb_table(os.environ.get('ENROLLMENTS_TABLE', 'tsa-coach-enrollments-v1-dev'))
+        enrollments_table = get_dynamodb_table(config.get_env_vars('SERVICE')['ENROLLMENTS_TABLE'], get_table_name('enrollments')))
         
         # Update completed steps
         completed_steps = enrollment.get('completed_steps', [])

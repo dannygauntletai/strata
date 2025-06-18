@@ -11,6 +11,7 @@ from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 from .table_names import get_resource_config
+from .table_utils import get_or_create_table, get_standard_table_props
 
 
 class DataStack(Stack):
@@ -193,8 +194,8 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True,
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True
         )
         
         # Profiles table - Extended profile information
@@ -206,8 +207,8 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True,
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True
         )
         
         # Organizations table
@@ -235,11 +236,11 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
             point_in_time_recovery=True if self.stage == "prod" else False,
-            time_to_live_attribute="expires_at",
-            removal_policy=RemovalPolicy.DESTROY
+            time_to_live_attribute="expires_at"
         )
-        
+
         # Add GSI for email lookups
         self.coach_invitations_table.add_global_secondary_index(
             index_name="email-index",
@@ -248,7 +249,7 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             )
         )
-        
+
         # Add GSI for status-based queries
         self.coach_invitations_table.add_global_secondary_index(
             index_name="status-index",
@@ -267,10 +268,10 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            time_to_live_attribute="expires_at",
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            time_to_live_attribute="expires_at"
         )
-        
+
         # Add GSI for parent email lookups
         self.parent_invitations_table.add_global_secondary_index(
             index_name="parent-email-index",
@@ -289,10 +290,10 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            time_to_live_attribute="expires_at",
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            time_to_live_attribute="expires_at"
         )
-        
+
         # Add GSI for event-based lookups
         self.event_invitations_table.add_global_secondary_index(
             index_name="event-id-index",
@@ -315,10 +316,10 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True,
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True
         )
-        
+
         # Add GSI for parent email lookup
         self.enrollments_table.add_global_secondary_index(
             index_name="parent-email-index",
@@ -341,10 +342,10 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True,
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True
         )
-        
+
         # Add GSI for coach-based event queries
         self.events_table.add_global_secondary_index(
             index_name="coach-events-index",
@@ -379,11 +380,10 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True,
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True
         )
         
-        # ✅ ARCHITECTURAL FIX: Add scheduling table to shared data stack (single source of truth)
         # Scheduling table - Consultation and shadow day scheduling for parent enrollments
         self.scheduling_table = dynamodb.Table(
             self, "SchedulingTable",
@@ -393,10 +393,10 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True,
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True
         )
-        
+
         # Add GSI for enrollment lookup
         self.scheduling_table.add_global_secondary_index(
             index_name="enrollment-id-index",
@@ -405,8 +405,8 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             )
         )
-        
-        # Add GSI for coach lookup  
+
+        # Add GSI for coach lookup
         self.scheduling_table.add_global_secondary_index(
             index_name="coach-id-index",
             partition_key=dynamodb.Attribute(
@@ -444,8 +444,8 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            time_to_live_attribute="expires_at",
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            time_to_live_attribute="expires_at"
         )
         
     @property

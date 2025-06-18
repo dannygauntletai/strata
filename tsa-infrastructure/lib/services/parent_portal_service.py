@@ -172,11 +172,21 @@ class ParentPortalService(Construct):
     def _create_api_gateway(self):
         """Create API Gateway for parent functionality"""
         
-        # Create log group for API Gateway
-        log_group = logs.LogGroup(
-            self, "ParentPortalAPILogs",
-            log_group_name=f"/aws/apigateway/tsa-parent-api-{self.stage}",
-        )
+        # Create log group for API Gateway (import existing if present)
+        log_group_name = f"/aws/apigateway/tsa-parent-api-{self.stage}"
+        try:
+            log_group = logs.LogGroup.from_log_group_name(
+                self, "ParentPortalAPILogs",
+                log_group_name=log_group_name
+            )
+            print(f"✅ Imported existing parent log group: {log_group_name}")
+        except Exception:
+            log_group = logs.LogGroup(
+                self, "ParentPortalAPILogs",
+                log_group_name=log_group_name,
+                retention=logs.RetentionDays.ONE_MONTH
+            )
+            print(f"🆕 Created new parent log group: {log_group_name}")
         
         # Get environment-specific CORS origins
         cors_origins = self.env_config.get("cors_origins", {})
@@ -188,7 +198,7 @@ class ParentPortalService(Construct):
         # Create API Gateway
         self.api = apigateway.RestApi(
             self, "ParentPortalAPI",
-            rest_api_name=self.resource_config.get_api_names()["parent_api"],
+            rest_api_name=self.resource_config.get_api_names()["parent"],
             description=f"API for TSA Parent Portal and Student Enrollment ({self.stage})",
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=parent_origins,

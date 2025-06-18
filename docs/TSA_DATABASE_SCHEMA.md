@@ -38,10 +38,10 @@ graph TB
 
     subgraph "Database Layer"
         subgraph "DynamoDB - Operational Data"
-            PROFILES[("profiles-v1-dev")]
-            INVITATIONS[("coach-invitations-v1-dev")]
-            ENROLLMENTS[("tsa-parent-enrollments-v1-dev")]
-            AUDIT[("admin-audit-logs-v1-dev")]
+            PROFILES[("profilesdev")]
+            INVITATIONS[("coach-invitationsdev")]
+            ENROLLMENTS[("tsa-parent-enrollmentsdev")]
+            AUDIT[("admin-audit-logsdev")]
         end
 
         subgraph "PostgreSQL - Compliance Data"
@@ -77,7 +77,7 @@ All DynamoDB tables follow the pattern: `{logical-name}-{stage}`
 
 ### 📊 **Coach Portal Tables**
 
-#### 1. **profiles-v1-dev**
+#### 1. **profilesdev**
 **Purpose**: Coach profiles and operational data  
 **Access Pattern**: Single coach lookups, coach-by-school queries
 
@@ -99,7 +99,7 @@ All DynamoDB tables follow the pattern: `{logical-name}-{stage}`
 
 ---
 
-#### 2. **coach-onboarding-sessions-v1-dev**
+#### 2. **coach-onboarding-sessionsdev**
 **Purpose**: Temporary onboarding session data with TTL  
 **Access Pattern**: Session-based lookups during onboarding
 
@@ -116,7 +116,7 @@ All DynamoDB tables follow the pattern: `{logical-name}-{stage}`
 
 ---
 
-#### 3. **parent-invitations-v1-dev**
+#### 3. **parent-invitationsdev**
 **Purpose**: Parent invitations sent by coaches  
 **Access Pattern**: Coach-sent invitations, parent lookup by email
 
@@ -141,7 +141,7 @@ All DynamoDB tables follow the pattern: `{logical-name}-{stage}`
 
 ### 👨‍👩‍👧‍👦 **Parent Portal Tables**
 
-#### 4. **tsa-parent-enrollments-v1-dev**
+#### 4. **tsa-parent-enrollmentsdev**
 **Purpose**: Student enrollment records and progress tracking  
 **Access Pattern**: Parent-based lookups, student progress queries
 
@@ -165,7 +165,7 @@ All DynamoDB tables follow the pattern: `{logical-name}-{stage}`
 
 ---
 
-#### 5. **tsa-parent-documents-v1-dev**
+#### 5. **tsa-parent-documentsdev**
 **Purpose**: Document upload tracking and verification  
 **Access Pattern**: Parent document lookups, document type queries
 
@@ -190,7 +190,7 @@ All DynamoDB tables follow the pattern: `{logical-name}-{stage}`
 
 ---
 
-#### 6. **tsa-parent-scheduling-v1-dev**
+#### 6. **tsa-parent-schedulingdev**
 **Purpose**: Consultation and shadow day scheduling  
 **Access Pattern**: Coach schedule management, parent appointment booking
 
@@ -218,7 +218,7 @@ All DynamoDB tables follow the pattern: `{logical-name}-{stage}`
 
 ### 👩‍💼 **Admin Portal Tables**
 
-#### 7. **coach-invitations-v1-dev**
+#### 7. **coach-invitationsdev**
 **Purpose**: Coach invitations sent by admin portal  
 **Access Pattern**: Admin invitation management, coach onboarding tracking
 
@@ -243,7 +243,7 @@ All DynamoDB tables follow the pattern: `{logical-name}-{stage}`
 
 ---
 
-#### 8. **admin-audit-logs-v1-dev**
+#### 8. **admin-audit-logsdev**
 **Purpose**: Admin action audit trail  
 **Access Pattern**: Admin action tracking, compliance reporting
 
@@ -530,18 +530,18 @@ graph LR
 ### **DynamoDB Environment Variables**
 ```bash
 # Coach Portal
-PROFILES_TABLE=profiles-v1-dev
-ONBOARDING_TABLE=coach-onboarding-sessions-v1-dev
-PARENT_INVITATIONS_TABLE=parent-invitations-v1-dev
+PROFILES_TABLE=profilesdev
+ONBOARDING_TABLE=coach-onboarding-sessionsdev
+PARENT_INVITATIONS_TABLE=parent-invitationsdev
 
 # Parent Portal
-ENROLLMENTS_TABLE=tsa-parent-enrollments-v1-dev
-DOCUMENTS_TABLE=tsa-parent-documents-v1-dev
-SCHEDULING_TABLE=tsa-parent-scheduling-v1-dev
+ENROLLMENTS_TABLE=tsa-parent-enrollmentsdev
+DOCUMENTS_TABLE=tsa-parent-documentsdev
+SCHEDULING_TABLE=tsa-parent-schedulingdev
 
 # Admin Portal
-INVITATIONS_TABLE=coach-invitations-v1-dev
-AUDIT_LOGS_TABLE=admin-audit-logs-v1-dev
+INVITATIONS_TABLE=coach-invitationsdev
+AUDIT_LOGS_TABLE=admin-audit-logsdev
 
 # Future
 ORGANIZATIONS_TABLE=organizations-dev

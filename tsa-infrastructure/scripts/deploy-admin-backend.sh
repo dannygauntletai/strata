@@ -16,17 +16,17 @@ MAX_RETRIES=3
 
 # Resource names that commonly conflict
 CONFLICTING_TABLES=(
-    "admin-audit-logs-v1-dev"
-    "coach-analytics-sessions-v1-dev"
-    "coach-attribution-models-v1-dev"
-    "coach-custom-reports-v1-dev"
-    "coach-invitations-v1-dev"
-    "coach-analytics-events-v1-dev"
-    "coach-utm-campaigns-v1-dev"
+    "admin-audit-logsdev"
+    "coach-analytics-sessionsdev"
+    "coach-attribution-modelsdev"
+    "coach-custom-reportsdev"
+    "coach-invitationsdev"
+    "coach-analytics-eventsdev"
+    "coach-utm-campaignsdev"
 )
 
 CONFLICTING_LOG_GROUPS=(
-    "/aws/apigateway/admin-portal-v1-dev"
+    "/aws/apigateway/admin-portaldev"
 )
 
 echo -e "${BLUE}🚀 TSA Admin Backend Deployment Script${NC}"

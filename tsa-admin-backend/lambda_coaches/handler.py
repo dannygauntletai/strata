@@ -8,6 +8,8 @@ import boto3
 from typing import Dict, Any
 from datetime import datetime
 import logging
+from shared_config import get_config
+
 
 # Set up logger first
 logger = logging.getLogger()
@@ -20,6 +22,8 @@ except ImportError as e:
     logger.error(f"Failed to import shared utilities: {e}")
     raise
 
+
+config = get_config()
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for coach management requests"""
@@ -61,7 +65,7 @@ def list_coaches(event: Dict[str, Any]) -> Dict[str, Any]:
         
         dynamodb = boto3.resource('dynamodb')
         # Connect to the profiles table where coach data is stored
-        profiles_table = dynamodb.Table(os.environ.get('TSA_PROFILES_TABLE', 'profiles-v1-dev'))
+        profiles_table = dynamodb.Table(config.get_table_name('profiles'))
         
         logger.info(f"Querying profiles table: {profiles_table.table_name}")
         
@@ -133,7 +137,7 @@ def get_coach(coach_id: str) -> Dict[str, Any]:
     """Get specific coach details"""
     try:
         dynamodb = boto3.resource('dynamodb')
-        profiles_table = dynamodb.Table(os.environ.get('TSA_PROFILES_TABLE', 'profiles-v1-dev'))
+        profiles_table = dynamodb.Table(config.get_table_name('profiles'))
         
         # Try to find coach by profile_id first
         response = profiles_table.scan(
@@ -179,7 +183,7 @@ def update_coach(coach_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
         body = parse_event_body(event)
         
         dynamodb = boto3.resource('dynamodb')
-        profiles_table = dynamodb.Table(os.environ.get('TSA_PROFILES_TABLE', 'profiles-v1-dev'))
+        profiles_table = dynamodb.Table(config.get_table_name('profiles'))
         
         # Find the coach first
         response = profiles_table.scan(
@@ -276,7 +280,7 @@ def delete_coach(coach_id: str) -> Dict[str, Any]:
             return create_cors_response(400, {'error': 'Coach ID is required'})
         
         dynamodb = boto3.resource('dynamodb')
-        profiles_table = dynamodb.Table(os.environ.get('TSA_PROFILES_TABLE', 'profiles-v1-dev'))
+        profiles_table = dynamodb.Table(config.get_table_name('profiles'))
         
         # Find the coach first
         response = profiles_table.scan(

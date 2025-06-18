@@ -9,6 +9,8 @@ import uuid
 from typing import Dict, Any
 from datetime import datetime, timedelta
 import logging
+from shared_config import get_config
+
 
 # Set up logger first
 logger = logging.getLogger()
@@ -21,6 +23,8 @@ except ImportError as e:
     logger.error(f"Failed to import shared utilities: {e}")
     raise
 
+
+config = get_config()
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Main handler for invitation management requests"""
@@ -92,7 +96,7 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         
         # Check for duplicate pending invitations
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(os.environ.get('TSA_INVITATIONS_TABLE', 'coach-invitations-v1-dev'))
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
         
         # Check if active invitation already exists for this email
         response = invitations_table.scan(
@@ -197,7 +201,7 @@ def list_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
         limit = int(query_params.get('limit', 50))
         
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(os.environ.get('TSA_INVITATIONS_TABLE', 'coach-invitations-v1-dev'))
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
         
         if status_filter:
             # Query by status using GSI
@@ -232,7 +236,7 @@ def get_invitation(invitation_id: str) -> Dict[str, Any]:
     """Get specific invitation details"""
     try:
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(os.environ.get('TSA_INVITATIONS_TABLE', 'coach-invitations-v1-dev'))
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
         
         response = invitations_table.get_item(
             Key={'invitation_id': invitation_id}
@@ -271,7 +275,7 @@ def resend_invitation(invitation_id: str) -> Dict[str, Any]:
         
         # Update last sent timestamp
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(os.environ.get('TSA_INVITATIONS_TABLE', 'coach-invitations-v1-dev'))
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
         invitations_table.update_item(
             Key={'invitation_id': invitation_id},
             UpdateExpression='SET last_sent_at = :timestamp',
@@ -289,7 +293,7 @@ def cancel_invitation(invitation_id: str) -> Dict[str, Any]:
     """Cancel an invitation"""
     try:
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(os.environ.get('TSA_INVITATIONS_TABLE', 'coach-invitations-v1-dev'))
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
         
         # Update status to cancelled
         invitations_table.update_item(
@@ -313,7 +317,7 @@ def delete_invitation(invitation_id: str) -> Dict[str, Any]:
     """Permanently delete an invitation"""
     try:
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(os.environ.get('TSA_INVITATIONS_TABLE', 'coach-invitations-v1-dev'))
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
         
         # First check if invitation exists and get email for logging
         response = invitations_table.get_item(Key={'invitation_id': invitation_id})
@@ -366,7 +370,7 @@ def update_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, An
                     expression_values[f':{field}'] = body[field]
         
         dynamodb = boto3.resource('dynamodb')
-        invitations_table = dynamodb.Table(os.environ.get('TSA_INVITATIONS_TABLE', 'coach-invitations-v1-dev'))
+        invitations_table = dynamodb.Table(config.get_table_name('coach-invitations')
         
         invitations_table.update_item(
             Key={'invitation_id': invitation_id},
