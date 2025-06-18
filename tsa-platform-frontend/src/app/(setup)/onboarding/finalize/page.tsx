@@ -48,7 +48,7 @@ interface OnboardingData {
   
   // Agreements & Background Check
   platform_agreement: boolean
-  microschool_agreement: boolean
+
   background_check_status: string
 }
 
@@ -100,7 +100,6 @@ export default function Finalize() {
       
       // Agreements & Background Check
         platform_agreement: localStorage.getItem('onboarding_platform_agreement') === 'true',
-        microschool_agreement: localStorage.getItem('onboarding_microschool_agreement') === 'true',
       // Simple mock logic: if mock mode, set to completed, otherwise read from storage
       background_check_status: process.env.NODE_ENV === 'development' || localStorage.getItem('MOCK_MODE') === 'true' 
         ? 'completed' 
@@ -368,12 +367,6 @@ export default function Finalize() {
                   <span className="font-medium text-gray-700">Platform Agreement:</span>
                   <span className={`ml-2 ${onboardingData.platform_agreement ? 'text-green-600' : 'text-red-600'}`}>
                     {onboardingData.platform_agreement ? 'Accepted' : 'Not Accepted'}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium text-gray-700">Microschool Agreement:</span>
-                  <span className={`ml-2 ${onboardingData.microschool_agreement ? 'text-green-600' : 'text-red-600'}`}>
-                    {onboardingData.microschool_agreement ? 'Accepted' : 'Not Accepted'}
                   </span>
                 </div>
               </div>

@@ -5,6 +5,7 @@ import { Link } from '@/components/link'
 import { motion } from 'framer-motion'
 import { invitationAPI, getStoredInvitationData, isInvitationOnboarding, getCachedInvitationToken, buildInvitationURL, clearInvitationData } from '@/lib/invitation-api'
 import { config } from '@/config/environments'
+import { getNextAcademicYear } from '@/lib/academic-year-utils'
 
 export default function Complete() {
   const [isLoading, setIsLoading] = useState(true)
@@ -78,7 +79,7 @@ export default function Complete() {
       grade_levels_served: serverData.grade_levels_served || JSON.parse(localStorage.getItem('onboarding_grade_levels_served') || '[]'),
       has_physical_location: serverData.has_physical_location !== undefined ? serverData.has_physical_location : (localStorage.getItem('onboarding_has_physical_location') !== 'false'),
       website: serverData.website || localStorage.getItem('onboarding_website') || '',
-      academic_year: serverData.academic_year || localStorage.getItem('onboarding_academic_year') || '2024-2025',
+      academic_year: serverData.academic_year || localStorage.getItem('onboarding_academic_year') || getNextAcademicYear(),
       
       // School address information (optional)
       school_street: serverData.school_street || localStorage.getItem('onboarding_school_street') || '',
@@ -102,7 +103,7 @@ export default function Complete() {
       
       // Compliance and agreements (if collected)
       platform_agreement: serverData.platform_agreement !== undefined ? serverData.platform_agreement : (localStorage.getItem('onboarding_platform_agreement') === 'true'),
-      microschool_agreement: serverData.microschool_agreement !== undefined ? serverData.microschool_agreement : (localStorage.getItem('onboarding_microschool_agreement') === 'true'),
+
       background_check_status: serverData.background_check_status || localStorage.getItem('onboarding_background_check_status') || 'pending',
       
       // System fields
@@ -212,7 +213,6 @@ export default function Complete() {
       
       // Compliance
       'onboarding_platform_agreement',
-      'onboarding_microschool_agreement',
       'onboarding_background_check_status',
       
       // Legacy fields

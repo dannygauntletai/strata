@@ -45,7 +45,7 @@ export interface OnboardingProgress {
   step_data: Record<string, any>;
   last_updated: string;
   invitation_based: boolean;
-  invitation_token?: string;
+  invitation_id?: string;
 }
 
 export interface OnboardingData {
@@ -88,8 +88,8 @@ export interface OnboardingData {
   current_step: string;
   completed_steps: string[];
   
-  // Include invitation token for backend validation
-  invitation_token?: string;
+  // Include invitation ID for backend validation
+  invitation_id?: string;
 }
 
 export interface OnboardingResponse {
@@ -141,7 +141,7 @@ class CoachInvitationAPI {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ invitation_token: token })
+        body: JSON.stringify({ invitation_id: token })
       });
       
       if (!response.ok) {
@@ -192,7 +192,7 @@ class CoachInvitationAPI {
         },
         body: JSON.stringify({ 
           email,
-          invitation_token: invitationToken 
+          invitation_id: invitationToken 
         })
       });
       
@@ -230,7 +230,7 @@ class CoachInvitationAPI {
           current_step: currentStep,
           step_data: stepData,
           completed_steps: completedSteps,
-          invitation_token: invitationToken
+          invitation_id: invitationToken
         })
       });
       

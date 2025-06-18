@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { ProgressFooter } from '@/components/progress-footer'
 import { buildInvitationURL, ONBOARDING_STEPS } from '@/lib/invitation-api'
 import { useOnboardingState } from '@/hooks/useOnboardingState'
+import { getNextAcademicYear } from '@/lib/academic-year-utils'
 import Link from 'next/link'
 
 export default function StudentPlanning() {
@@ -43,12 +44,17 @@ export default function StudentPlanning() {
       if (!formData.enrollment_capacity) {
         updates.enrollment_capacity = 100
       }
+
+      // Set the academic year to the next academic year
+      if (!formData.academic_year) {
+        updates.academic_year = getNextAcademicYear()
+      }
       
       if (Object.keys(updates).length > 0) {
         updateMultipleFields(updates)
       }
     }
-  }, [formData.enrollment_capacity, onboardingLoading, updateMultipleFields])
+  }, [formData.enrollment_capacity, formData.academic_year, onboardingLoading, updateMultipleFields])
 
   const studentCountRanges = [
     { id: '0', name: '0 students', description: 'Starting fresh' },
@@ -67,7 +73,7 @@ export default function StudentPlanning() {
 
   const validateForm = () => {
     if (!formData.estimated_student_count) {
-      setErrorMessage('Please select your estimated student count')
+      setErrorMessage('Please select your expected student count for the fall semester')
       return false
     }
     return true
@@ -121,42 +127,13 @@ export default function StudentPlanning() {
           </h1>
           
           <p className="text-xl text-center text-[#717171] mb-12">
-            Tell us about your expected student enrollment for the upcoming fall semester.
+            How many students do you expect to have for the fall semester of {formData.academic_year || getNextAcademicYear()}?
           </p>
 
           <div className="space-y-8">
-            {/* Current Students */}
+            {/* Student Count Selection */}
             <div>
-              <h3 className="text-2xl font-semibold text-[#222222] mb-4">Do you currently have students?</h3>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => handleInputChange('has_current_students', true)}
-                  className={`px-6 py-3 rounded-xl border-2 transition-all ${
-                    formData.has_current_students
-                      ? 'border-[#174fa2] bg-blue-50 text-[#174fa2]'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  Yes, I have current students
-                </button>
-                <button
-                  onClick={() => handleInputChange('has_current_students', false)}
-                  className={`px-6 py-3 rounded-xl border-2 transition-all ${
-                    !formData.has_current_students
-                      ? 'border-[#174fa2] bg-blue-50 text-[#174fa2]'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  No, I&apos;m starting fresh
-                </button>
-              </div>
-            </div>
-
-            {/* Current Student Count */}
-            <div>
-              <h3 className="text-2xl font-semibold text-[#222222] mb-4">
-                {formData.has_current_students ? 'How many students do you currently have?' : 'How many students do you plan to start with?'}
-              </h3>
+              <h3 className="text-2xl font-semibold text-[#222222] mb-6 text-center">Expected Student Count</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {studentCountRanges.map((range) => (
                   <button
@@ -175,22 +152,16 @@ export default function StudentPlanning() {
               </div>
             </div>
 
-            {/* Additional Details for Current Students */}
-            {formData.has_current_students && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                transition={{ duration: 0.3 }}
-              >
-                <h3 className="text-2xl font-semibold text-[#222222] mb-4">Tell us about your current students</h3>
-                <textarea
-                  value={formData.current_student_details}
-                  onChange={(e) => handleInputChange('current_student_details', e.target.value)}
-                  className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Briefly describe your current students, their interests, grade levels, or any special considerations..."
-                />
-              </motion.div>
-            )}
+            {/* Additional Information */}
+            <div>
+              <h3 className="text-2xl font-semibold text-[#222222] mb-4">Additional Details <span className="text-gray-500 text-lg">(Optional)</span></h3>
+              <textarea
+                value={formData.student_details || ''}
+                onChange={(e) => handleInputChange('student_details', e.target.value)}
+                className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Tell us about your students, their interests, grade levels, or any special considerations..."
+              />
+            </div>
           </div>
 
           {/* Error message */}

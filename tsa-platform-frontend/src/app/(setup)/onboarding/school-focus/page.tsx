@@ -29,14 +29,14 @@ export default function SchoolFocus() {
     getProgressPercentage
   } = useOnboardingState({
     currentStep: ONBOARDING_STEPS.SCHOOL_FOCUS,
-    requiredFields: ['sport', 'school_categories']
+    requiredFields: ['sport']
   })
 
   const [showError, setShowError] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [isOtherSport, setIsOtherSport] = useState(false)
 
-  // Initialize form data with invitation pre-fills and check for other sports
+  // Initialize form data with invitation pre-fills and auto-set school categories
   useEffect(() => {
     if (!onboardingLoading) {
       // Pre-fill with invitation data if available
@@ -44,6 +44,11 @@ export default function SchoolFocus() {
       
       if (invitationData?.sport && !formData.sport) {
         updates.sport = invitationData.sport
+      }
+
+      // Always ensure both school categories are selected
+      if (!formData.school_categories || formData.school_categories.length === 0) {
+        updates.school_categories = ['academic_focus', 'athletic_focus']
       }
       
       if (Object.keys(updates).length > 0) {
@@ -56,7 +61,7 @@ export default function SchoolFocus() {
         setIsOtherSport(true)
       }
     }
-  }, [invitationData, onboardingLoading, formData.sport, updateMultipleFields])
+  }, [invitationData, onboardingLoading, formData.sport, formData.school_categories, updateMultipleFields])
 
   const handleInputChange = (field: string, value: string | string[]) => {
     updateField(field, value)
@@ -84,14 +89,6 @@ export default function SchoolFocus() {
     setErrorMessage('')
   }
 
-  const handleCategoryToggle = (category: string) => {
-    const updated = (formData.school_categories || []).includes(category)
-      ? (formData.school_categories || []).filter((c: string) => c !== category)
-      : [...(formData.school_categories || []), category]
-    
-    handleInputChange('school_categories', updated)
-  }
-
   const handleFocusToggle = (focus: string) => {
     const updated = (formData.program_focus || []).includes(focus)
       ? (formData.program_focus || []).filter((f: string) => f !== focus)
@@ -109,11 +106,6 @@ export default function SchoolFocus() {
     if (formData.sport === 'football' && !formData.football_type) {
       setShowError(true)
       setErrorMessage('Please select a football type')
-      return
-    }
-    if (!formData.school_categories || formData.school_categories.length === 0) {
-      setShowError(true)
-      setErrorMessage('Please select at least one school category')
       return
     }
     
@@ -143,11 +135,6 @@ export default function SchoolFocus() {
     { id: '7-man', name: '7-man' },
     { id: '8-man', name: '8-man' },
     { id: '11-man', name: '11-man' }
-  ]
-
-  const schoolCategories = [
-    { id: 'academic_focus', name: 'Academic Excellence', description: 'Strong focus on traditional academics' },
-    { id: 'athletic_focus', name: 'Athletic Program', description: 'Sports-centered curriculum and training' }
   ]
 
   const programFoci = [
@@ -270,28 +257,6 @@ export default function SchoolFocus() {
                 </div>
               </motion.div>
             )}
-
-            {/* School Categories */}
-            <div>
-              <h2 className="text-2xl font-semibold mb-6 text-[#222222]">School Categories</h2>
-              <p className="text-gray-600 mb-4">Select all that apply to your school&apos;s educational approach.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {schoolCategories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => handleCategoryToggle(category.id)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${
-                      (formData.school_categories || []).includes(category.id)
-                        ? 'border-[#174fa2] bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <h4 className="font-semibold text-lg text-[#222222]">{category.name}</h4>
-                    <p className="text-[#717171] text-sm mt-1">{category.description}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Program Focus */}
             <div>

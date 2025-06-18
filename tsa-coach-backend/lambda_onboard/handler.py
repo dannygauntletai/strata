@@ -63,32 +63,36 @@ def lambda_handler(event, context):
         return create_response(500, {'error': 'Internal server error'})
 
 def validate_invitation(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate invitation token and return comprehensive coach data"""
+    """Validate invitation ID and return comprehensive coach data"""
     
     try:
-        invitation_token = data.get('invitation_token')
-        if not invitation_token:
-            return create_response(400, {'error': 'invitation_token is required'})
+        invitation_id = data.get('invitation_id')
+        if not invitation_id:
+            return create_response(400, {'error': 'invitation_id is required'})
         
-        # Get invitation from admin backend table
+        # Get invitation from admin backend table using direct lookup
         invitations_table = dynamodb.Table(INVITATIONS_TABLE)
         
-        # Query by invitation_token (assuming there's a GSI for this)
-        response = invitations_table.scan(
-            FilterExpression='invitation_token = :token',
-            ExpressionAttributeValues={':token': invitation_token}
-        )
+        # Direct lookup by invitation_id (primary key) - much faster than scan
+        try:
+            response = invitations_table.get_item(Key={'invitation_id': invitation_id})
+        except Exception as e:
+            logger.error(f"Error accessing invitation table: {str(e)}")
+            return create_response(500, {'error': 'Failed to validate invitation'})
         
-        if not response['Items']:
+        if 'Item' not in response:
             return create_response(400, {
                 'valid': False,
-                'error': 'Invalid or expired invitation token'
+                'error': 'Invalid or expired invitation'
             })
         
-        invitation = response['Items'][0]
+        invitation = response['Item']
         
-        # Check if invitation is still valid
-        if invitation.get('status') != 'pending':
+        # Check if invitation is still valid - allow both pending and accepted statuses
+        # pending: Invitation sent, coach hasn't started onboarding  
+        # accepted: Coach started onboarding but hasn't finished
+        valid_statuses = ['pending', 'accepted']
+        if invitation.get('status') not in valid_statuses:
             return create_response(400, {
                 'valid': False,
                 'error': f'Invitation is {invitation.get("status", "invalid")}'
@@ -134,7 +138,7 @@ def get_onboarding_progress(data: Dict[str, Any]) -> Dict[str, Any]:
     
     try:
         email = data.get('email')
-        invitation_token = data.get('invitation_token')
+        invitation_id = data.get('invitation_id')
         
         if not email:
             return create_response(400, {'error': 'email is required'})
@@ -162,8 +166,8 @@ def get_onboarding_progress(data: Dict[str, Any]) -> Dict[str, Any]:
                     'completed_steps': [],
                     'step_data': {},
                     'last_updated': datetime.now(timezone.utc).isoformat(),
-                    'invitation_based': bool(invitation_token),
-                    'invitation_token': invitation_token,
+                    'invitation_based': bool(invitation_id),
+                    'invitation_id': invitation_id,
                     'expires_at': int((datetime.now(timezone.utc).timestamp() + (7 * 24 * 60 * 60)))  # 7 days TTL
                 }
                 
@@ -173,12 +177,12 @@ def get_onboarding_progress(data: Dict[str, Any]) -> Dict[str, Any]:
                 # - pending: Invitation sent, coach hasn't started onboarding
                 # - accepted: Coach STARTED onboarding but hasn't finished 
                 # - completed: Coach FINISHED onboarding completely (set in complete_onboarding)
-                if invitation_token:
-                    invitation_updated = update_invitation_status_by_token(invitation_token, 'accepted')
+                if invitation_id:
+                    invitation_updated = update_invitation_status_by_id(invitation_id, 'accepted')
                     if invitation_updated:
                         logger.info(f"✅ Marked invitation as accepted for session: {email}")
                     else:
-                        logger.warning(f"⚠️ Failed to update invitation status for token: {invitation_token}")
+                        logger.warning(f"⚠️ Failed to update invitation status for ID: {invitation_id}")
                 
                 logger.info(f"Created new onboarding progress for: {email}")
                 
@@ -200,7 +204,7 @@ def update_onboarding_progress(data: Dict[str, Any]) -> Dict[str, Any]:
         current_step = data.get('current_step')
         step_data = data.get('step_data', {})
         completed_steps = data.get('completed_steps', [])
-        invitation_token = data.get('invitation_token')
+        invitation_id = data.get('invitation_id')
         
         if not email or not current_step:
             return create_response(400, {'error': 'email and current_step are required'})
@@ -222,10 +226,10 @@ def update_onboarding_progress(data: Dict[str, Any]) -> Dict[str, Any]:
             ':last_updated': datetime.now(timezone.utc).isoformat()
         }
         
-        # Add invitation_token if provided
-        if invitation_token:
-            update_expression += ", invitation_token = :invitation_token, invitation_based = :invitation_based"
-            expression_values[':invitation_token'] = invitation_token
+        # Add invitation_id if provided
+        if invitation_id:
+            update_expression += ", invitation_id = :invitation_id, invitation_based = :invitation_based"
+            expression_values[':invitation_id'] = invitation_id
             expression_values[':invitation_based'] = True
         
         sessions_table.update_item(
@@ -247,7 +251,7 @@ def complete_onboarding(data: Dict[str, Any]) -> Dict[str, Any]:
     
     try:
         email = data.get('email')
-        invitation_token = data.get('invitation_token')
+        invitation_id = data.get('invitation_id')
         
         if not email:
             return create_response(400, {'error': 'email is required'})
@@ -316,12 +320,12 @@ def complete_onboarding(data: Dict[str, Any]) -> Dict[str, Any]:
             'school_phone': step_data.get('school_phone', ''),
             'website': step_data.get('website', ''),
             'has_physical_location': step_data.get('has_physical_location', True),
-            'academic_year': step_data.get('academic_year', '2024-2025'),
+            'academic_year': step_data.get('academic_year', ''),
             
             # Sports and focus
             'sport': step_data.get('sport', ''),
             'football_type': step_data.get('football_type', ''),
-            'school_categories': step_data.get('school_categories', []),
+            'school_categories': step_data.get('school_categories', ['academic_focus', 'athletic_focus']),
             'program_focus': step_data.get('program_focus', []),
             
             # Student planning
@@ -333,7 +337,7 @@ def complete_onboarding(data: Dict[str, Any]) -> Dict[str, Any]:
             
             # Compliance and agreements
             'platform_agreement': step_data.get('platform_agreement', False),
-            'microschool_agreement': step_data.get('microschool_agreement', False),
+
             'background_check_status': step_data.get('background_check_status', 'pending'),
             
             # OneRoster compliant organizational data
@@ -405,11 +409,11 @@ def complete_onboarding(data: Dict[str, Any]) -> Dict[str, Any]:
         if invitation_token:
             try:
                 # Use the helper function to properly update invitation status
-                invitation_updated = update_invitation_status_by_token(invitation_token, 'completed')
+                invitation_updated = update_invitation_status_by_id(invitation_id, 'completed')
                 if invitation_updated:
                     logger.info(f"✅ Marked invitation as completed for: {email}")
                 else:
-                    logger.warning(f"⚠️ Failed to update invitation status to completed for token: {invitation_token}")
+                    logger.warning(f"⚠️ Failed to update invitation status to completed for ID: {invitation_id}")
             except Exception as e:
                 logger.warning(f"Could not update invitation status to completed: {str(e)}")
         
@@ -472,26 +476,24 @@ def convert_dynamodb_to_dict(item: Dict[str, Any]) -> Dict[str, Any]:
     
     return convert_value(item) 
 
-def update_invitation_status_by_token(invitation_token: str, status: str) -> bool:
-    """Update invitation status by finding invitation by token"""
+def update_invitation_status_by_id(invitation_id: str, status: str) -> bool:
+    """Update invitation status by invitation_id (direct lookup)"""
     try:
-        if not invitation_token:
+        if not invitation_id:
             return False
             
         invitations_table = dynamodb.Table(INVITATIONS_TABLE)
         
-        # Find invitation by token using scan (since token is not the partition key)
-        response = invitations_table.scan(
-            FilterExpression='invitation_token = :token',
-            ExpressionAttributeValues={':token': invitation_token}
-        )
-        
-        if not response.get('Items'):
-            logger.warning(f"No invitation found with token: {invitation_token}")
+        # Direct lookup by invitation_id (primary key) - much faster than scan
+        try:
+            response = invitations_table.get_item(Key={'invitation_id': invitation_id})
+        except Exception as e:
+            logger.error(f"Error accessing invitation: {str(e)}")
             return False
         
-        invitation = response['Items'][0]
-        invitation_id = invitation['invitation_id']
+        if 'Item' not in response:
+            logger.warning(f"No invitation found with ID: {invitation_id}")
+            return False
         
         # Update the invitation status
         invitations_table.update_item(

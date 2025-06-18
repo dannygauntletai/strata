@@ -143,7 +143,7 @@ def create_invitation(event: Dict[str, Any]) -> Dict[str, Any]:
         invitations_table.put_item(Item=invitation)
         
         # Send invitation email with personalized content
-        invite_url = f"{os.environ.get('TSA_FRONTEND_URL', 'https://coach.texassportsacademy.com')}/onboarding?invite={invitation_token}"
+        invite_url = f"{os.environ.get('TSA_FRONTEND_URL', 'http://localhost:3000')}/onboarding?invite={invitation_id}"
         send_invitation_email(email, invite_url, invitation)
         
         # Log the action with comprehensive details
@@ -270,7 +270,7 @@ def resend_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, An
             return create_cors_response(400, {'error': 'Invitation has expired'}, event)
         
         # Resend email
-        invite_url = f"{os.environ.get('TSA_FRONTEND_URL', 'https://coach.texassportsacademy.com')}/onboarding?invite={invitation['invitation_token']}"
+        invite_url = f"{os.environ.get('TSA_FRONTEND_URL', 'http://localhost:3000')}/onboarding?invite={invitation['invitation_id']}"
         send_invitation_email(invitation['email'], invite_url, invitation)
         
         # Update last sent timestamp
