@@ -165,14 +165,13 @@ cdk deploy TSA-Frontend-dev
 
 ```bash
 # API Endpoints
-NEXT_PUBLIC_COACH_API_URL=https://api.tsa-coach.com/coach-portal
-NEXT_PUBLIC_LEADS_API_URL=https://api.tsa-coach.com/leads
-NEXT_PUBLIC_ADMISSIONS_API_URL=https://api.tsa-coach.com/admissions
-NEXT_PUBLIC_ANALYTICS_API_URL=https://api.tsa-coach.com/analytics
+NEXT_PUBLIC_COACH_API_URL=https://api.sportsacademy.school/coach-portal
+NEXT_PUBLIC_LEADS_API_URL=https://api.sportsacademy.school/leads
+NEXT_PUBLIC_ADMISSIONS_API_URL=https://api.sportsacademy.school/admissions
+NEXT_PUBLIC_ANALYTICS_API_URL=https://api.sportsacademy.school/analytics
 
 # Authentication
-NEXT_PUBLIC_AUTH_DOMAIN=auth.tsa-coach.com
-NEXT_PUBLIC_CLIENT_ID=admin-portal-client-id
+NEXT_PUBLIC_AUTH_DOMAIN=auth.sportsacademy.school
 
 # Environment
 NEXT_PUBLIC_ENV=development|staging|production

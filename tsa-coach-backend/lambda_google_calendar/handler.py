@@ -6,7 +6,7 @@ import json
 from typing import Dict, Any, List, Optional
 
 # Import centralized models and utilities - NO fallback pattern
-from shared_utils import (
+from tsa_shared import (
     create_api_response, parse_event_body, get_current_time, 
     standardize_error_response, get_table_name, get_dynamodb_table,
     generate_id, validate_email, UserIdentifier, CoachProfile

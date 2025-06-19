@@ -8,7 +8,7 @@ import boto3
 from typing import Dict, Any
 from datetime import datetime
 import logging
-from shared_config import get_config
+from tsa_shared.config import get_config
 
 
 # Set up logger first
@@ -17,7 +17,7 @@ logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 
 # Import shared utilities from consolidated shared layer
 try:
-    from shared_utils import create_cors_response, parse_event_body, log_admin_action
+    from tsa_shared import create_cors_response, parse_event_body, log_admin_action
 except ImportError as e:
     logger.error(f"Failed to import shared utilities: {e}")
     raise

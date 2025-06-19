@@ -17,7 +17,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 from typing import Dict, Any
-from shared_config import get_config
+from tsa_shared.config import get_config
 from ..shared.table_names import get_resource_config, get_table_iam_arns
 from ..shared.table_utils import get_or_create_table, get_standard_table_props
 import logging
@@ -29,34 +29,25 @@ class AdminPortalService(Construct):
     """Streamlined TSA Admin Service - Coach Invitations and Audit Health Only"""
     
     def __init__(self, scope: Construct, construct_id: str, 
-                 shared_resources: Dict[str, Any], stage: str, **kwargs) -> None:
+                 shared_resources: Dict[str, Any], 
+                 shared_layer: lambda_.ILayerVersion,
+                 stage: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
         self.shared_resources = shared_resources
         self.stage = stage
         self.env_config = shared_resources.get("environment_config", {})
+        self.shared_layer = shared_layer
         
         # Get centralized resource configuration using shared_config (single source of truth)
         self.shared_config = get_config(stage)
         self.table_config = self.shared_config
         
         # Create streamlined resources
-        self._create_lambda_layers()
         self._create_core_dynamodb_tables()
         self._create_lambda_functions()
         self._create_api_gateway()
         self._create_outputs()
-        
-    def _create_lambda_layers(self):
-        """Create shared Lambda layer for admin functionality"""
-        
-        # Admin layer (main functionality)
-        self.admin_layer = lambda_.LayerVersion(
-            self, "AdminSharedLayer",
-            code=lambda_.Code.from_asset("../tsa-admin-backend/shared_layer"),
-            compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
-            description="Shared models and utilities for admin functionality"
-        )
         
     def _create_core_dynamodb_tables(self):
         """Import core DynamoDB tables from data layer - Data layer is single source of truth"""
@@ -143,7 +134,7 @@ class AdminPortalService(Construct):
         # Common Lambda configuration
         base_lambda_config = {
             "runtime": lambda_.Runtime.PYTHON_3_9,
-            "layers": [self.admin_layer],
+            "layers": [self.shared_layer],
             "timeout": Duration.seconds(30),
             "memory_size": 512,
             "vpc": vpc,
@@ -162,7 +153,7 @@ class AdminPortalService(Construct):
             "DB_PORT": "5432",
             "USER_POOL_ID": user_pool.user_pool_id if user_pool else "",
             "CLIENT_ID": user_pool_client.user_pool_client_id if user_pool_client else "",
-            "FROM_EMAIL": self.env_config.get("from_email", "no-reply@sportsacademy.tech"),
+            "FROM_EMAIL": self.env_config.get("from_email", "no-reply@sportsacademy.school"),
             "FRONTEND_URL": coach_frontend_url,
             "ADMIN_FRONTEND_URL": admin_frontend_url,
             "STAGE": self.stage,
@@ -185,25 +176,17 @@ class AdminPortalService(Construct):
         # CORE LAMBDA FUNCTIONS
         # ========================================
         
-        # 1. Coach Invitation Management (with SendGrid bundling like auth backend)
+        # 1. Coach Invitation Management (using shared layer)
         self.invitations_function = lambda_.Function(
             self, "InvitationsHandler",
             function_name=self.table_config.get_lambda_names()["admin_invitations"],
-            code=lambda_.Code.from_asset(
-                "../tsa-admin-backend",
-                bundling=BundlingOptions(
-                    image=lambda_.Runtime.PYTHON_3_9.bundling_image,
-                    command=[
-                        "bash", "-c",
-                        "pip install -r shared_layer/requirements.txt -t /asset-output && cp -au lambda_invitations/* /asset-output/ && cp -au shared_layer/python/* /asset-output/"
-                    ],
-                )
-            ),
+            code=lambda_.Code.from_asset("../tsa-admin-backend/lambda_invitations"),
             handler="handler.lambda_handler",
             environment=common_env,
             runtime=lambda_.Runtime.PYTHON_3_9,
             timeout=Duration.seconds(30),
             memory_size=512,
+            layers=[self.shared_layer],
             vpc=vpc,
             security_groups=[lambda_security_group] if lambda_security_group else None,
             vpc_subnets=ec2.SubnetSelection(

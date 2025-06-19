@@ -27,17 +27,15 @@ def get_allowed_origin(event: Dict[str, Any] = None) -> str:
             "http://localhost:3000",
             "https://localhost:3000",
             "http://localhost:3001",
-            "http://localhost:3002"
+            "https://localhost:3001"
         ],
         "staging": [
-            "https://staging-coach.texassportsacademy.com",
-            "https://staging-admin.texassportsacademy.com",
-            "https://staging-admissions.texassportsacademy.com"
+            "https://staging-app.sportsacademy.school",
+            "https://staging-admin.sportsacademy.school"
         ],
         "prod": [
-            "https://coach.texassportsacademy.com",
-            "https://admin.texassportsacademy.com", 
-            "https://admissions.texassportsacademy.com"
+            "https://app.sportsacademy.school",
+            "https://admin.sportsacademy.school"
         ]
     }
     
@@ -326,18 +324,15 @@ def get_frontend_url(service: str = "unified") -> str:
     urls = {
         "dev": {
             "unified": "http://localhost:3000",
-            "admin": "http://localhost:3001",
-            "admissions": "http://localhost:3002"
+            "admin": "http://localhost:3001"
         },
         "staging": {
-            "unified": "https://staging-coach.texassportsacademy.com",
-            "admin": "https://staging-admin.texassportsacademy.com",
-            "admissions": "https://staging-admissions.texassportsacademy.com"
+            "unified": "https://staging-app.sportsacademy.school",
+            "admin": "https://staging-admin.sportsacademy.school"
         },
         "prod": {
-            "unified": "https://coach.texassportsacademy.com",
-            "admin": "https://admin.texassportsacademy.com",
-            "admissions": "https://admissions.texassportsacademy.com"
+            "unified": "https://app.sportsacademy.school",
+            "admin": "https://admin.sportsacademy.school"
         }
     }
     

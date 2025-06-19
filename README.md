@@ -175,22 +175,146 @@ npm run dev:admin     # Admin frontend on localhost:3001
 npm run dev:backend   # Backend services (if applicable)
 ```
 
-### **4. First Deployment**
+### **4. Deployment**
+
+The monorepo now uses a **unified deployment script** that consolidates all deployment logic:
 
 ```bash
-# Create and push to develop branch
+# Deploy to development environment
+./deploy.sh deploy dev
+
+# Deploy to staging environment  
+./deploy.sh deploy staging
+
+# Deploy to production environment
+./deploy.sh deploy prod
+
+# Deploy a single stack
+./deploy.sh deploy-stack tsa-admin-backend-dev
+
+# Sync endpoints and update frontend configs
+./deploy.sh sync staging
+
+# Show development environment guide
+./deploy.sh guide
+
+# Check deployment status
+./deploy.sh status staging
+
+# See all options
+./deploy.sh help
+```
+
+**NPM Script Shortcuts:**
+```bash
+npm run deploy              # Deploy to dev
+npm run deploy:staging      # Deploy to staging
+npm run deploy:prod         # Deploy to production
+npm run deploy:status       # Check status
+npm run sync:endpoints      # Sync endpoints
+npm run dev:guide           # Show development guide
+```
+
+**Automated CI/CD via GitHub Actions:**
+```bash
+# Create and push to develop branch (auto-deploys to staging)
 git checkout -b develop
 git push -u origin develop
 
-# Make a small change to trigger deployment
-echo "# GitHub Actions Test" >> README.md
-git add README.md
-git commit -m "test: trigger first deployment"
-git push origin develop
-
-# Watch deployment progress
-# GitHub → Actions → "TSA Infrastructure & Services Deployment"
+# Push to main (manual approval for production)
+git checkout main
+git push origin main
 ```
+
+---
+
+## 🚀 **Unified Deployment System**
+
+The TSA monorepo now uses a **single deployment script** (`./deploy.sh`) that replaces all previous scattered deployment scripts.
+
+### **Key Features**
+
+✅ **Single Source of Truth** - One script handles all environments  
+✅ **Automatic Dependency Management** - CDK handles stack dependencies  
+✅ **Built-in Validation** - Prerequisites and environment checks  
+✅ **Error Recovery** - Automatic cleanup and retry logic  
+✅ **Environment Safety** - Production deployment confirmation  
+✅ **Comprehensive Logging** - Detailed deployment progress  
+
+### **Deployment Commands**
+
+| Command | Description |
+|---------|-------------|
+| `./deploy.sh deploy dev` | Deploy all stacks to development |
+| `./deploy.sh deploy staging` | Deploy all stacks to staging |
+| `./deploy.sh deploy prod` | Deploy all stacks to production |
+| `./deploy.sh deploy-stack <stack> <env>` | Deploy single stack |
+| `./deploy.sh status <env>` | Check deployment status |
+| `./deploy.sh destroy <env>` | Destroy environment (dev/staging only) |
+| `./deploy.sh help` | Show all commands and options |
+
+### **NPM Integration**
+
+All deployment commands are available through npm scripts:
+
+```bash
+npm run deploy              # Quick deploy to dev
+npm run deploy:staging      # Deploy to staging
+npm run deploy:prod         # Deploy to production
+npm run deploy:coach        # Deploy coach backend only
+npm run deploy:admin        # Deploy admin backend only
+npm run deploy:status       # Check deployment status
+```
+
+### **Stack Deployment Order**
+
+The deployment script automatically handles dependencies:
+
+1. **Infrastructure Layer** (parallel where possible):
+   - `tsa-infra-networking-{env}` - VPC, subnets, security groups
+   - `tsa-infra-security-{env}` - Cognito, IAM roles, secrets  
+   - `tsa-infra-data-{env}` - PostgreSQL, S3 buckets
+   - `tsa-infra-auth-{env}` - Passwordless authentication
+
+2. **Application Layer** (sequential for table dependencies):
+   - `tsa-admin-backend-{env}` - **Must deploy first** (creates shared tables)
+   - `tsa-coach-backend-{env}` - Depends on admin tables
+   - `tsa-parent-backend-{env}` - Depends on admin tables
+
+### **Environment Configuration**
+
+Each environment has specific URLs and settings:
+
+| Environment | Frontend | Admin | API |
+|-------------|----------|-------|-----|
+| **dev** | `localhost:3000` | `localhost:3001` | AWS API Gateway |
+| **staging** | `staging-app.sportsacademy.school` | `staging-admin.sportsacademy.school` | `api-staging.sportsacademy.school` |
+| **prod** | `app.sportsacademy.school` | `admin.sportsacademy.school` | `api.sportsacademy.school` |
+
+### **Deployment Options**
+
+```bash
+# Force deployment (skip dependency warnings)
+./deploy.sh deploy staging --force
+
+# Skip endpoint synchronization
+./deploy.sh deploy dev --skip-sync
+
+# Dry run (show what would be deployed)
+./deploy.sh deploy prod --dry-run
+
+# Custom region
+./deploy.sh deploy dev --region us-west-2
+```
+
+### **Migration from Old Scripts**
+
+The following old scripts have been **removed** and consolidated:
+
+- ❌ `deploy-staging.sh` → ✅ `./deploy.sh deploy staging`
+- ❌ `tsa-infrastructure/deploy.sh` → ✅ `./deploy.sh deploy dev`
+- ❌ `validate-staging-deployment.sh` → ✅ Built into `./deploy.sh`
+- ❌ Complex package.json scripts → ✅ Simple npm run commands
 
 ---
 
@@ -309,7 +433,7 @@ GitHub Actions automatically detects changes and deploys only affected services:
 - **Technology**: Next.js 13+ with App Router
 - **Features**: Dashboard, parent invitations, marketing tools
 - **Local URL**: http://localhost:3000
-- **Production URL**: https://coach.texassportsacademy.com
+- **Production URL**: https://app.sportsacademy.school
 
 **Backend** (`tsa-coach-backend/`)
 - **Technology**: AWS Lambda with Python/Node.js
@@ -322,7 +446,7 @@ GitHub Actions automatically detects changes and deploys only affected services:
 - **Technology**: React with Vite
 - **Features**: Coach management, system analytics, audit logs
 - **Local URL**: http://localhost:3001
-- **Production URL**: https://admin.texassportsacademy.com
+- **Production URL**: https://admin.sportsacademy.school
 
 **Backend** (`tsa-admin-backend/`)
 - **Technology**: AWS Lambda with Python/Node.js

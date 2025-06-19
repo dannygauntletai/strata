@@ -5,14 +5,12 @@
 
 import { config } from '@/config/environments'
 
-// Admin configuration
-const AUTHORIZED_ADMIN_EMAILS = [
-  'danny.mota@superbuilders.school',
-  'malekai.mischke@superbuilders.school'
-];
-
+// Admin authorization is now handled by the backend
+// Frontend no longer maintains a hardcoded list
 export const isAuthorizedAdmin = (email: string): boolean => {
-  return AUTHORIZED_ADMIN_EMAILS.includes(email.toLowerCase().trim());
+  // Basic email format validation only
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.toLowerCase().trim());
 };
 
 // Use centralized configuration
@@ -565,11 +563,11 @@ export class AdminAuth {
    */
   async sendMagicLink(email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      // Validate admin email first
+      // Basic email format validation (authorization handled by backend)
       if (!isAuthorizedAdmin(email)) {
         return {
           success: false,
-          error: 'Email not authorized. Only designated administrators can access this portal.'
+          error: 'Please enter a valid email address.'
         };
       }
 
@@ -628,11 +626,11 @@ export class AdminAuth {
    */
   async verifyToken(token: string, email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      // Validate admin email
+      // Basic email format validation (authorization handled by backend)
       if (!isAuthorizedAdmin(email)) {
         return {
           success: false,
-          error: 'Email not authorized for admin access.'
+          error: 'Invalid email format.'
         };
       }
 

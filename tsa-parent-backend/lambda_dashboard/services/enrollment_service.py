@@ -5,7 +5,7 @@ Handles parent enrollment operations with proper data access patterns
 from typing import Dict, Any, List
 from tsa_shared import get_table, UserIdentifier
 import os
-from shared_config import get_config
+from tsa_shared.config import get_config
 
 
 

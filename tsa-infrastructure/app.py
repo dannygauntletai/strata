@@ -45,47 +45,47 @@ def get_environment_config(stage: str) -> dict:
         "staging": {
             "frontend_urls": {
                 # Staging frontend URLs
-                "unified": "https://staging.sportsacademy.tech",
-                "admin": "https://admin-staging.sportsacademy.tech"
+                "unified": "https://staging-app.sportsacademy.school",
+                "admin": "https://staging-admin.sportsacademy.school"
             },
             "cors_origins": {
                 # Staging CORS origins
                 "unified": [
-                    "https://staging.sportsacademy.tech",
+                    "https://staging-app.sportsacademy.school",
                     # Add localhost support for local development
                     "http://localhost:3000",
                     "https://localhost:3000"
                 ],
                 "admin": [
-                    "https://admin-staging.sportsacademy.tech",
+                    "https://staging-admin.sportsacademy.school",
                     # Add localhost support for local development
                     "http://localhost:3001",
                     "https://localhost:3001"
                 ]
             },
             "domains": {
-                "api_base": "api-staging.sportsacademy.tech",
-                "custom_domain": "sportsacademy.tech"
+                "api_base": "api-staging.sportsacademy.school",
+                "custom_domain": "sportsacademy.school"
             }
         },
         "prod": {
             "frontend_urls": {
                 # Production frontend URLs
-                "unified": "https://app.sportsacademy.tech",
-                "admin": "https://admin.sportsacademy.tech"
+                "unified": "https://app.sportsacademy.school",
+                "admin": "https://admin.sportsacademy.school"
             },
             "cors_origins": {
                 # Production CORS origins
                 "unified": [
-                    "https://app.sportsacademy.tech"
+                    "https://app.sportsacademy.school"
                 ],
                 "admin": [
-                    "https://admin.sportsacademy.tech"
+                    "https://admin.sportsacademy.school"
                 ]
             },
             "domains": {
-                "api_base": "api.sportsacademy.tech",
-                "custom_domain": "sportsacademy.tech"
+                "api_base": "api.sportsacademy.school",
+                "custom_domain": "sportsacademy.school"
             }
         }
     }
@@ -145,7 +145,9 @@ def main():
     auth_stack = PasswordlessAuthStack(
         app, f'tsa-infra-auth-{stage}',
         stage=stage,
-        domain_name='sportsacademy.tech',
+        user_pool=security_stack.user_pool,
+        user_pool_client=security_stack.user_pool_client,
+        domain_name='sportsacademy.school',
         frontend_url=env_config["frontend_urls"]["unified"],  # Unified frontend per Rule 10
         env=env,
         description=f"Passwordless email authentication service ({stage})"
@@ -183,7 +185,8 @@ def main():
     
     admin_service = AdminPortalService(
         admin_backend_stack, "AdminPortalService",
-        shared_resources=shared_resources,  # Only needs basic shared resources
+        shared_resources=shared_resources,
+        shared_layer=auth_stack.shared_layer_construct.layer,
         stage=stage
     )
     
@@ -202,6 +205,7 @@ def main():
     coach_service = CoachPortalService(
         coach_backend_stack, "CoachPortalService",
         shared_resources=shared_resources,
+        shared_layer=auth_stack.shared_layer_construct.layer,
         stage=stage
     )
     
@@ -223,6 +227,7 @@ def main():
             **shared_resources,
             "coach_profiles_table_name": coach_service.table_names["users"]  # Access to coach data
         },
+        shared_layer=auth_stack.shared_layer_construct.layer,
         stage=stage
     )
     

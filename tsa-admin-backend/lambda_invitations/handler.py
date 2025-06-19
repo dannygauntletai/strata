@@ -9,7 +9,7 @@ import uuid
 from typing import Dict, Any
 from datetime import datetime, timedelta
 import logging
-from shared_config import get_config
+from tsa_shared.config import get_config
 
 
 # Set up logger first
@@ -18,7 +18,7 @@ logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 
 # Import shared utilities from consolidated shared layer
 try:
-    from shared_utils import create_cors_response, parse_event_body, log_admin_action, SendGridEmailService
+    from tsa_shared import create_cors_response, parse_event_body, log_admin_action, SendGridService
 except ImportError as e:
     logger.error(f"Failed to import shared utilities: {e}")
     raise
@@ -389,7 +389,7 @@ def update_invitation(invitation_id: str, event: Dict[str, Any]) -> Dict[str, An
 def send_invitation_email(email: str, invite_url: str, invitation: Dict[str, Any]) -> None:
     """Send personalized coach invitation email using shared SendGrid utility"""
     try:
-        sendgrid_service = SendGridEmailService()
+        sendgrid_service = SendGridService()
         
         # Create personalized invitation data for email template
         personalized_invitation = {

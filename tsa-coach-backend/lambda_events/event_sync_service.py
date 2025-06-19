@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import sys
 sys.path.append('/opt/python')
 from tsa_shared.database import get_dynamodb_table, get_table_name, get_current_timestamp
-from shared_utils.dynamodb_models import (
+from tsa_shared.table_models import (
     Event, EventbriteConfig, EventbriteOAuthStatus, EventAttendee,
     EventStatus, AttendeeStatus, TicketType
 )

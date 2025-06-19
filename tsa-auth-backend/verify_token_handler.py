@@ -8,20 +8,35 @@ import json
 import uuid
 from datetime import datetime
 from typing import Dict, Any
-from shared_config import get_config
+from tsa_shared.config import get_config
 
-# Import shared utilities
-from shared_utils import (
+# Import shared utilities from centralized layer
+from tsa_shared import (
     verify_magic_link_jwt,
     generate_cognito_tokens,
-    get_coach_profile,
-    get_parent_profile,
-    get_admin_profile,
     create_response,
-    create_error_response,
-    create_health_response,
+    format_error_response,
     validate_user_exists
 )
+
+# These will need to be implemented or imported from service-specific modules
+def get_coach_profile(email, request_id):
+    # TODO: Implement coach profile retrieval
+    return {'profile_type': 'coach'}
+
+def get_parent_profile(email, invitation_token, request_id):
+    # TODO: Implement parent profile retrieval
+    return {'profile_type': 'parent'}
+
+def get_admin_profile(email, request_id):
+    # TODO: Implement admin profile retrieval
+    return {'profile_type': 'admin'}
+
+def create_error_response(message, status_code, request_id=None):
+    return create_response(status_code, {'error': message})
+
+def create_health_response(service, status, details, request_id=None):
+    return create_response(200, {'service': service, 'status': status, 'details': details})
 
 # Initialize shared config
 config = get_config()

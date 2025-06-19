@@ -4,7 +4,7 @@ Lambda handler for quiz questions CRUD operations
 import json
 import os
 from typing import Dict, Any
-from shared_utils import (
+from tsa_shared import (
     create_response, get_dynamodb_table, parse_event_body,
     get_current_timestamp, validate_required_fields, get_path_parameters
 )

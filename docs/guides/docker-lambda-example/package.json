@@ -1,8 +1,0 @@
-{
-  "name": "llc-incorporation-docker",
-  "version": "1.0.0",
-  "dependencies": {
-    "playwright": "^1.40.0",
-    "aws-lambda-ric": "^2.0.0"
-  }
-}

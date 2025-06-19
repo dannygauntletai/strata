@@ -246,7 +246,7 @@ const productionConfig = {
   passwordlessAuth: 'https://blka63phul.execute-api.us-east-2.amazonaws.com/v1',
   adminApi: 'https://gt87xbmjcj.execute-api.us-east-2.amazonaws.com/prod',
   corsOrigins: [
-    'https://admin.texassportsacademy.com'  // Production admin domain
+    'https://admin.sportsacademy.school'  // Production admin domain
   ],
   mfaRequired: true,
   sessionTimeout: '8h'

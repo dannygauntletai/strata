@@ -5,12 +5,23 @@ Fixed ID mapping issues and CORS duplication. Uses shared data models.
 import json
 from typing import Dict, Any, List, Optional
 
-# Import centralized models and utilities - NO fallback pattern
-from shared_utils import (
-    create_api_response, parse_event_body, get_current_time, 
-    standardize_error_response, get_table_name, get_dynamodb_table,
+# Import from centralized shared layer
+from tsa_shared import (
+    create_response as create_api_response, parse_event_body, get_current_timestamp as get_current_time, 
+    format_error_response as standardize_error_response, get_config,
     UserIdentifier, CoachProfile, BootcampModule, BootcampProgress
 )
+
+config = get_config()
+
+def get_table_name(table_type):
+    stage = os.environ.get('STAGE', 'dev')
+    return config.get_table_name(table_type, stage)
+
+def get_dynamodb_table(table_name):
+    import boto3
+    dynamodb = boto3.resource('dynamodb')
+    return dynamodb.Table(table_name)
 
 # remove
 # Bootcamp module definitions - centralized configuration

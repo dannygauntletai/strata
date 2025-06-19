@@ -72,7 +72,7 @@ curl -X POST https://api.example.com/admin/invitations \
 {
   "message": "Invitation created successfully",
   "invitation_id": "7a9187f8-56bf-4866-8c83-3a56a181a1b3",
-  "invite_url": "https://coach.texassportsacademy.com/onboarding?invite=37e5d8a6-e862-42ea-8614-c0cfaeb2053d",
+  "invite_url": "https://app.sportsacademy.school/onboarding?invite=37e5d8a6-e862-42ea-8614-c0cfaeb2053d",
   "expires_at": 1750531379,
   "coach_info": {
     "full_name": "Sarah Johnson",

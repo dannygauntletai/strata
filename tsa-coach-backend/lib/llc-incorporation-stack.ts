@@ -124,7 +124,7 @@ export class LlcIncorporationStack extends cdk.Stack {
       // CORS configuration
       defaultCorsPreflightOptions: {
         allowOrigins: stage === 'prod' 
-          ? ['https://coach.texassportsacademy.com'] // Production origins only
+          ? ['https://app.sportsacademy.school'] // Production origins only
           : ['http://localhost:3000', 'https://localhost:3000'], // Development origins
         allowMethods: ['GET', 'POST', 'OPTIONS'],
         allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],

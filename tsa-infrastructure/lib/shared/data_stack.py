@@ -195,7 +195,8 @@ class DataStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
-            point_in_time_recovery=True
+            point_in_time_recovery=True,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
         
         # Profiles table - Extended profile information
@@ -208,7 +209,8 @@ class DataStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
-            point_in_time_recovery=True
+            point_in_time_recovery=True,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
         
         # Organizations table
@@ -220,7 +222,8 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
         
         # ========================================
@@ -238,7 +241,8 @@ class DataStack(Stack):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
             point_in_time_recovery=True if self.stage == "prod" else False,
-            time_to_live_attribute="expires_at"
+            time_to_live_attribute="expires_at",
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
 
         # Add GSI for email lookups
@@ -269,7 +273,8 @@ class DataStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
-            time_to_live_attribute="expires_at"
+            time_to_live_attribute="expires_at",
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
 
         # Add GSI for parent email lookups
@@ -291,7 +296,8 @@ class DataStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
-            time_to_live_attribute="expires_at"
+            time_to_live_attribute="expires_at",
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
 
         # Add GSI for event-based lookups
@@ -317,7 +323,8 @@ class DataStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
-            point_in_time_recovery=True
+            point_in_time_recovery=True,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
 
         # Add GSI for parent email lookup
@@ -343,7 +350,8 @@ class DataStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
-            point_in_time_recovery=True
+            point_in_time_recovery=True,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
 
         # Add GSI for coach-based event queries
@@ -364,7 +372,45 @@ class DataStack(Stack):
                 type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+        )
+        
+        # Event attendees table (synced from Eventbrite)
+        self.event_attendees_table = dynamodb.Table(
+            self, "EventAttendeesTable",
+            table_name=self.table_config.get_table_name("event-attendees"),
+            partition_key=dynamodb.Attribute(
+                name="attendee_id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
+        )
+
+        # Add GSI for event-based attendee queries
+        self.event_attendees_table.add_global_secondary_index(
+            index_name="event-attendees-index",
+            partition_key=dynamodb.Attribute(
+                name="event_id",
+                type=dynamodb.AttributeType.STRING
+            )
+        )
+        
+        # Eventbrite configuration table (coach-specific)
+        self.eventbrite_config_table = dynamodb.Table(
+            self, "EventbriteConfigTable",
+            table_name=self.table_config.get_table_name("eventbrite-config"),
+            partition_key=dynamodb.Attribute(
+                name="coach_id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
         
         # ========================================
@@ -381,7 +427,8 @@ class DataStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
-            point_in_time_recovery=True
+            point_in_time_recovery=True,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
         
         # Scheduling table - Consultation and shadow day scheduling for parent enrollments
@@ -394,7 +441,8 @@ class DataStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
-            point_in_time_recovery=True
+            point_in_time_recovery=True,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
         )
 
         # Add GSI for enrollment lookup
@@ -556,4 +604,18 @@ class DataStack(Stack):
             value=self.scheduling_table.table_name,
             description="Scheduling table name",
             export_name=f"UnifiedPlatformSchedulingTable-{self.stage}"
+        )
+        
+        CfnOutput(
+            self, "EventAttendeesTableName",
+            value=self.event_attendees_table.table_name,
+            description="Event attendees table name",
+            export_name=f"UnifiedPlatformEventAttendeesTable-{self.stage}"
+        )
+        
+        CfnOutput(
+            self, "EventbriteConfigTableName",
+            value=self.eventbrite_config_table.table_name,
+            description="Eventbrite config table name",
+            export_name=f"UnifiedPlatformEventbriteConfigTable-{self.stage}"
         ) 

@@ -6,6 +6,7 @@ JWT-based magic links - no DynamoDB storage required
 import os
 import time
 import random
+import string
 from aws_cdk import (
     Stack,
     Duration,
@@ -30,11 +31,15 @@ class PasswordlessAuthStack(Stack):
     """Python implementation of passwordless email authentication with JWT tokens"""
     
     def __init__(self, scope: Construct, construct_id: str, 
-                 stage: str, domain_name: str = "sportsacademy.tech",
+                 stage: str, user_pool: cognito.IUserPool, 
+                 user_pool_client: cognito.IUserPoolClient,
+                 domain_name: str = "sportsacademy.school",
                  frontend_url: str = None, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
         self.stage = stage
+        self.user_pool = user_pool
+        self.user_pool_client = user_pool_client
         self.domain_name = domain_name
         self.frontend_url = frontend_url or f"https://coach.{domain_name}"
         
@@ -42,87 +47,11 @@ class PasswordlessAuthStack(Stack):
         self.table_config = get_resource_config(stage)
         
         # Create core authentication resources
-        self._create_user_pool()
         self._create_jwt_secret()
         self._create_sendgrid_secret()
         self._create_lambda_functions()
         self._create_api_gateway()
         self._create_outputs()
-    
-    def _create_user_pool(self):
-        """Create Cognito User Pool for passwordless authentication"""
-        
-        # Create User Pool
-        self.user_pool = cognito.UserPool(
-            self, "TSAUserPool",
-            user_pool_name=f"tsa-unified-{self.stage}",
-            self_sign_up_enabled=True,
-            sign_in_aliases=cognito.SignInAliases(email=True),
-            auto_verify=cognito.AutoVerifiedAttrs(email=True),
-            standard_attributes=cognito.StandardAttributes(
-                email=cognito.StandardAttribute(required=True),
-                given_name=cognito.StandardAttribute(required=False),
-                family_name=cognito.StandardAttribute(required=False),
-            ),
-            custom_attributes={
-                "coach_id": cognito.StringAttribute(min_len=1, max_len=256),
-                "role_type": cognito.StringAttribute(min_len=1, max_len=100),
-                "user_role": cognito.StringAttribute(min_len=1, max_len=100),
-            },
-            password_policy=cognito.PasswordPolicy(
-                min_length=8,
-                require_lowercase=True,
-                require_uppercase=True,
-                require_digits=True,
-                require_symbols=True,
-            ),
-            account_recovery=cognito.AccountRecovery.EMAIL_ONLY
-        )
-        
-        # Create User Pool Client
-        self.user_pool_client = cognito.UserPoolClient(
-            self, "TSAUserPoolClient",
-            user_pool=self.user_pool,
-            user_pool_client_name=f"tsa-unified-client-{self.stage}",
-            auth_flows=cognito.AuthFlow(
-                admin_user_password=True,
-                custom=True,
-                user_password=True,
-                user_srp=True,
-            ),
-            supported_identity_providers=[
-                cognito.UserPoolClientIdentityProvider.COGNITO
-            ],
-            read_attributes=cognito.ClientAttributes()
-            .with_standard_attributes(
-                email=True,
-                email_verified=True,
-                given_name=True,
-                family_name=True
-            ),
-            write_attributes=cognito.ClientAttributes()
-            .with_standard_attributes(
-                email=True,
-                given_name=True,
-                family_name=True
-            ),
-            access_token_validity=Duration.hours(1),
-            id_token_validity=Duration.hours(1),
-            refresh_token_validity=Duration.days(30),
-            prevent_user_existence_errors=True,
-        )
-        
-        # ✅ ARCHITECTURAL FIX: Let CloudFormation manage domain lifecycle properly
-        # Use consistent naming and let CDK/CloudFormation handle "exists vs create" logic
-        domain_prefix = f"tsa-unified-{self.stage}"
-        
-        self.user_pool_domain = cognito.UserPoolDomain(
-            self, "TSAUserPoolDomain",
-            user_pool=self.user_pool,
-            cognito_domain=cognito.CognitoDomainOptions(
-                domain_prefix=domain_prefix
-            )
-        )
     
     def _create_jwt_secret(self):
         """Create or import JWT signing secret"""
@@ -185,9 +114,14 @@ class PasswordlessAuthStack(Stack):
     def _create_lambda_functions(self):
         """Create Lambda functions for passwordless auth flow"""
         
+        # Import the centralized shared utilities layer
+        from .shared.shared_lambda_layer import SharedLambdaLayer
+        self.shared_layer_construct = SharedLambdaLayer(self, "TSASharedUtilities", self.stage)
+        
         # Common Lambda configuration
         lambda_config = {
             "runtime": lambda_.Runtime.PYTHON_3_9,
+            "layers": [self.shared_layer_construct.layer],
             "timeout": Duration.seconds(30),
             "memory_size": 512,
             "environment": {
@@ -201,11 +135,11 @@ class PasswordlessAuthStack(Stack):
                 # JWT configuration
                 "JWT_SECRET_ARN": self.jwt_secret.secret_arn,
                 # SendGrid configuration
-                "SENDGRID_SECRET_ARN": self.sendgrid_secret.secret_arn,
+                "SENDGRID_API_KEY": self.sendgrid_secret.secret_arn,
                 "SENDGRID_FROM_EMAIL": "no-reply@strata.school",  # Correct domain
                 "SENDGRID_FROM_NAME": "Texas Sports Academy",
                 # Admin configuration
-                "ADMIN_EMAILS": "admin@sportsacademy.tech,danny.mota@superbuilders.school,malekai.mischke@superbuilders.school",
+                "ADMIN_EMAILS": "admin@sportsacademy.school,danny.mota@superbuilders.school,malekai.mischke@superbuilders.school",
             }
         }
         
@@ -301,7 +235,7 @@ class PasswordlessAuthStack(Stack):
         self.sendgrid_secret.grant_read(self.magic_link_function)
         self.sendgrid_secret.grant_read(self.verify_token_function)
         
-        # SSM Parameter Store permissions for admin emails
+        # SSM Parameter Store permissions for admin emails and SendGrid
         ssm_policy = iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
             actions=[
@@ -309,7 +243,8 @@ class PasswordlessAuthStack(Stack):
                 "ssm:GetParameters"
             ],
             resources=[
-                f"arn:aws:ssm:{self.region}:{self.account}:parameter/tsa/admin/authorized-emails"
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/tsa/admin/authorized-emails",
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/tsa/{self.stage}/sendgrid/api_key"
             ]
         )
         
@@ -414,12 +349,6 @@ class PasswordlessAuthStack(Stack):
             self, "UserPoolArn",
             value=self.user_pool.user_pool_arn,
             description="Cognito User Pool ARN"
-        )
-        
-        CfnOutput(
-            self, "UserPoolDomainUrl",
-            value=f"https://{self.user_pool_domain.domain_name}.auth.{self.region}.amazoncognito.com",
-            description="Cognito User Pool Domain URL"
         )
         
         # Export values for other stacks

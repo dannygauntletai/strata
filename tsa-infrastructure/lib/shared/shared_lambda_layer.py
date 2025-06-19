@@ -9,7 +9,7 @@ Key Features:
 - Consistent data models across all services
 - Security-first input validation
 """
-from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_lambda as lambda_, RemovalPolicy, CfnOutput
 from constructs import Construct
 
 
@@ -32,11 +32,10 @@ class SharedLambdaLayer(Construct):
                 lambda_.Runtime.PYTHON_3_11
             ],
             description=f"TSA shared utilities layer - CORS-free API responses, centralized models, ID mapping - {stage}",
-            removal_policy=lambda_.RemovalPolicy.RETAIN if stage == 'prod' else lambda_.RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.RETAIN if stage == 'prod' else RemovalPolicy.DESTROY
         )
         
         # Export the layer ARN for use by other stacks
-        from aws_cdk import CfnOutput
         CfnOutput(
             self, "SharedUtilitiesLayerArn",
             value=self.utilities_layer.layer_version_arn,

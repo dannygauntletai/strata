@@ -19,7 +19,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 from typing import Dict, Any
-from shared_config import get_config
+from tsa_shared.config import get_config
 from ..shared.table_names import get_resource_config, get_table_iam_arns
 from ..shared.table_utils import get_or_create_table, get_standard_table_props
 import logging
@@ -31,12 +31,15 @@ class CoachPortalService(Construct):
     """TSA Coach Portal Service - Standardized naming and shared table references"""
     
     def __init__(self, scope: Construct, construct_id: str, 
-                 shared_resources: Dict[str, Any], stage: str, **kwargs) -> None:
+                 shared_resources: Dict[str, Any], 
+                 shared_layer: lambda_.ILayerVersion,
+                 stage: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
         self.shared_resources = shared_resources
         self.stage = stage
         self.env_config = shared_resources.get("environment_config", {})
+        self.shared_layer = shared_layer
         
         # Get centralized resource configuration using shared_config (single source of truth)
         self.shared_config = get_config(stage)
@@ -53,20 +56,10 @@ class CoachPortalService(Construct):
         self.shared_table_names = self.shared_config.get_all_table_names()
         
         # Create coach-specific resources
-        self._create_lambda_layer()
         self._create_coach_specific_tables()
         self._create_lambda_functions()
         self._create_api_gateway()
         self._create_outputs()
-        
-    def _create_lambda_layer(self):
-        """Create shared Lambda layer for coach functions"""
-        self.coach_layer = lambda_.LayerVersion(
-            self, "CoachSharedLayer",
-            code=lambda_.Code.from_asset("../tsa-coach-backend/shared_layer"),
-            compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
-            description=f"Shared models and utilities for coach portal functionality - {self.stage}"
-        )
         
     def _create_coach_specific_tables(self):
         """Import shared tables from data stack and create coach-specific tables directly"""
@@ -168,40 +161,8 @@ class CoachPortalService(Construct):
             point_in_time_recovery=True
         )
         
-        # Eventbrite configuration table (coach-specific)
-        self.eventbrite_config_table = dynamodb.Table(
-            self, "EventbriteConfigTable",
-            table_name=self.get_table_name("eventbrite-config"),
-            partition_key=dynamodb.Attribute(
-                name="coach_id",
-                type=dynamodb.AttributeType.STRING
-            ),
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy=RemovalPolicy.RETAIN,
-            point_in_time_recovery=True
-        )
-        
-        # Event attendees table (synced from Eventbrite)
-        self.event_attendees_table = dynamodb.Table(
-            self, "EventAttendeesTable",
-            table_name=self.get_table_name("event-attendees"),
-            partition_key=dynamodb.Attribute(
-                name="attendee_id",
-                type=dynamodb.AttributeType.STRING
-            ),
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy=RemovalPolicy.RETAIN,
-            point_in_time_recovery=True
-        )
-        
-        # Add GSI for event-based attendee queries
-        self.event_attendees_table.add_global_secondary_index(
-            index_name="event-attendees-index",
-            partition_key=dynamodb.Attribute(
-                name="event_id",
-                type=dynamodb.AttributeType.STRING
-            )
-        )
+        # NOTE: eventbrite-config and event-attendees tables are now created in the Data Stack
+        # as shared resources, not coach-specific tables
         
     def _create_lambda_functions(self):
         """Create Lambda functions for coach functionality with standardized naming"""
@@ -227,7 +188,7 @@ class CoachPortalService(Construct):
         # Common Lambda configuration
         lambda_config = {
             "runtime": lambda_.Runtime.PYTHON_3_9,
-            "layers": [self.coach_layer],
+            "layers": [self.shared_layer],
             "environment": {
                 **self.get_service_environment_variables("coach"),
                 
@@ -245,8 +206,10 @@ class CoachPortalService(Construct):
                 "ONBOARDING_SESSIONS_TABLE": self.onboarding_table.table_name,
                 "BACKGROUND_CHECKS_TABLE": self.background_checks_table.table_name,
                 "LEGAL_REQUIREMENTS_TABLE": self.legal_requirements_table.table_name,
-                "EVENTBRITE_CONFIG_TABLE": self.eventbrite_config_table.table_name,
-                "EVENT_ATTENDEES_TABLE": self.event_attendees_table.table_name,
+                
+                # Shared event management tables (from data stack)
+                "EVENTBRITE_CONFIG_TABLE": self.shared_table_names["eventbrite-config"],
+                "EVENT_ATTENDEES_TABLE": self.shared_table_names["event-attendees"],
                 
                 # Eventbrite integration - using AWS Secrets Manager
                 "EVENTBRITE_SECRET_ARN": "arn:aws:secretsmanager:us-east-2:164722634547:secret:eventbrite-api-credentials-aDZtV9",
@@ -269,7 +232,7 @@ class CoachPortalService(Construct):
                 "STAGE": self.stage,
                 
                 # Other
-                "FROM_EMAIL": self.env_config.get("from_email", "no-reply@sportsacademy.tech"),
+                "FROM_EMAIL": self.env_config.get("from_email", "no-reply@sportsacademy.school"),
                 "LOG_LEVEL": "INFO"
             },
             "timeout": Duration.seconds(30),
@@ -363,14 +326,9 @@ class CoachPortalService(Construct):
             self.background_checks_table.grant_read_write_data(function)
             self.legal_requirements_table.grant_read_write_data(function)
             
-            # Grant permissions to coach-specific event management tables
-            # Note: Events table is owned by admin service, permissions granted via shared_table_arns below
-            self.eventbrite_config_table.grant_read_write_data(function)
-            self.event_attendees_table.grant_read_write_data(function)
-            
             # Grant permissions to shared tables from centralized configuration
             shared_table_arns = []
-            for table_key in ["users", "profiles", "coach-invitations", "parent-invitations", "event-invitations", "enrollments", "events", "documents"]:
+            for table_key in ["users", "profiles", "coach-invitations", "parent-invitations", "event-invitations", "enrollments", "events", "documents", "eventbrite-config", "event-attendees"]:
                 table_name = self.get_table_name(table_key)
                 shared_table_arns.extend([
                     f"arn:aws:dynamodb:*:*:table/{table_name}",
@@ -772,20 +730,6 @@ class CoachPortalService(Construct):
             export_name=f"tsa-coach-backend-{self.stage}:EventsTable"
         )
         
-        CfnOutput(
-            self, "EventbriteConfigTableOutput",
-            value=self.eventbrite_config_table.table_name,
-            description=f"Eventbrite Config Table ({self.stage})",
-            export_name=f"tsa-coach-backend-{self.stage}:EventbriteConfigTable"
-        )
-        
-        CfnOutput(
-            self, "EventAttendeesTableOutput",
-            value=self.event_attendees_table.table_name,
-            description=f"Event Attendees Table ({self.stage})",
-            export_name=f"tsa-coach-backend-{self.stage}:EventAttendeesTable"
-        )
-        
         # Store coach API URL for frontend sync scripts
         # SSM parameter /tsa/{stage}/api-urls/coach managed externally
         # See scripts/manage-ssm-parameters.sh for parameter management
@@ -804,8 +748,6 @@ class CoachPortalService(Construct):
             "onboarding_sessions": self.onboarding_table.table_name,
             "background_checks": self.background_checks_table.table_name,
             "legal_requirements": self.legal_requirements_table.table_name,
-            "eventbrite_config": self.eventbrite_config_table.table_name,
-            "event_attendees": self.event_attendees_table.table_name,
             
             # Shared tables from data infrastructure layer
             "users": self.shared_table_names["users"],
@@ -813,7 +755,11 @@ class CoachPortalService(Construct):
             "invitations": self.shared_table_names["coach-invitations"],
             "enrollments": self.shared_table_names["enrollments"],
             "events": self.shared_table_names["events"],
-            "documents": self.shared_table_names["documents"]
+            "documents": self.shared_table_names["documents"],
+            
+            # Shared event management tables (from data stack)
+            "eventbrite-config": self.shared_table_names["eventbrite-config"],
+            "event-attendees": self.shared_table_names["event-attendees"]
         }
     
     @property

@@ -13,7 +13,7 @@ from decimal import Decimal
 
 # Import shared utilities from consolidated shared layer
 try:
-    from shared_utils import create_cors_response, parse_event_body, log_admin_action
+    from tsa_shared import create_cors_response, parse_event_body, log_admin_action
     logger = logging.getLogger()
     logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 except ImportError as e:

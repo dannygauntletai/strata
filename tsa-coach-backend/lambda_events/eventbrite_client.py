@@ -11,6 +11,13 @@ from dataclasses import dataclass
 import logging
 import urllib.parse
 
+# Import shared utilities for DynamoDB integration
+import sys
+sys.path.append('/opt/python')
+from tsa_shared.database import get_dynamodb_table, get_current_timestamp
+from tsa_shared.config import get_table_name
+from tsa_shared.table_models import EventbriteConfig, EventbriteOAuthStatus
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -19,6 +26,19 @@ class EventbriteCredentials:
     access_token: str
     refresh_token: Optional[str] = None
     expires_at: Optional[datetime] = None
+
+    @classmethod
+    def from_config(cls, config: EventbriteConfig) -> 'EventbriteCredentials':
+        """Create credentials from DynamoDB config"""
+        expires_at = None
+        if config.token_expires_at:
+            expires_at = datetime.fromisoformat(config.token_expires_at)
+        
+        return cls(
+            access_token=config.access_token,
+            refresh_token=config.refresh_token,
+            expires_at=expires_at
+        )
 
 
 class EventbriteAPIError(Exception):

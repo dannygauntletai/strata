@@ -24,30 +24,23 @@ class ParentPortalService(Construct):
     """Parent Portal Service for enrollment management and communication"""
     
     def __init__(self, scope: Construct, construct_id: str, 
-                 shared_resources: Dict[str, Any], stage: str, **kwargs) -> None:
+                 shared_resources: Dict[str, Any], 
+                 shared_layer: lambda_.ILayerVersion,
+                 stage: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
         self.shared_resources = shared_resources
         self.stage = stage
         self.env_config = shared_resources.get("environment_config", {})
+        self.shared_layer = shared_layer
         
         # Get centralized resource configuration
         self.resource_config = get_resource_config(stage)
         
         # Create parent-specific resources
-        self._create_lambda_layer()
         self._create_dynamodb_tables()
         self._create_lambda_functions()
         self._create_api_gateway()
-        
-    def _create_lambda_layer(self):
-        """Create shared Lambda layer for parent functions"""
-        self.parent_layer = lambda_.LayerVersion(
-            self, "ParentSharedLayer",
-            code=lambda_.Code.from_asset("../tsa-parent-backend/shared_layer"),
-            compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
-            description="Shared models and utilities for parent portal functionality"
-        )
         
     def _create_dynamodb_tables(self):
         """Reference shared DynamoDB tables instead of creating duplicates"""
@@ -76,7 +69,7 @@ class ParentPortalService(Construct):
         # Common Lambda configuration
         lambda_config = {
             "runtime": lambda_.Runtime.PYTHON_3_9,
-            "layers": [self.parent_layer],
+            "layers": [self.shared_layer],
             "environment": {
                 # Use shared environment variables (EdFi/OneRoster standard tables)
                 **self.resource_config.get_service_environment_variables("parent"),
@@ -97,7 +90,7 @@ class ParentPortalService(Construct):
                 "STAGE": self.stage,
                 
                 # Other
-                "FROM_EMAIL": self.env_config.get("from_email", "no-reply@sportsacademy.tech"),
+                "FROM_EMAIL": self.env_config.get("from_email", "no-reply@sportsacademy.school"),
                 "LOG_LEVEL": "INFO"
             },
             "timeout": Duration.seconds(30),

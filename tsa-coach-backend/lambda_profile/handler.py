@@ -18,16 +18,26 @@ logger.setLevel(logging.INFO)
 # Add shared layer to path
 sys.path.append('/opt/python')
 
-# Import from local directory (copied shared utilities)
-from shared_utils import (
+# Import from centralized shared layer
+from tsa_shared import (
     create_response,
     get_dynamodb_table,
-    get_table_name,
     parse_event_body,
-    standardize_error_response,
+    format_error_response,
     get_current_timestamp,
+    extract_user_from_auth_token,
+    get_config
 )
-from auth_utils import extract_user_from_auth_token
+
+# Get table name from config
+config = get_config()
+
+def get_table_name(table_type):
+    stage = os.environ.get('STAGE', 'dev')
+    return config.get_table_name(table_type, stage)
+
+def standardize_error_response(error, context):
+    return {'error': str(error), 'context': context}
 # CoachProfile import removed - not used in this handler
 from user_identifier import UserIdentifier
 

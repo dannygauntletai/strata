@@ -9,12 +9,23 @@ import boto3
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
-# Import centralized models and utilities - NO fallback pattern
-from shared_utils import (
-    parse_event_body, get_current_time, 
-    standardize_error_response, get_table_name, get_dynamodb_table,
-    generate_id, validate_email, CoachProfile
+# Import from centralized shared layer
+from tsa_shared import (
+    parse_event_body, get_current_timestamp as get_current_time, 
+    format_error_response as standardize_error_response, get_config,
+    generate_id, validate_email_format as validate_email, CoachProfile
 )
+
+config = get_config()
+
+def get_table_name(table_type):
+    stage = os.environ.get('STAGE', 'dev')
+    return config.get_table_name(table_type, stage)
+
+def get_dynamodb_table(table_name):
+    import boto3
+    dynamodb = boto3.resource('dynamodb')
+    return dynamodb.Table(table_name)
 from user_identifier import UserIdentifier
 
 
@@ -444,9 +455,9 @@ def send_bulk_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
 def send_invitation_email(invitation: Dict[str, Any]) -> bool:
     """Send invitation email using SendGrid"""
     try:
-        from shared_utils.sendgrid_utils import SendGridEmailService
+        from tsa_shared.sendgrid_service import SendGridService
         
-        sendgrid_service = SendGridEmailService()
+        sendgrid_service = SendGridService()
         
         # Get event details for email content
         events_table = get_dynamodb_table(get_table_name('events'))
@@ -516,11 +527,11 @@ def send_invitation_email(invitation: Dict[str, Any]) -> bool:
         The Texas Sports Academy Team
         """
         
-        result = sendgrid_service.send_email(
+        result = sendgrid_service._send_email(
             to_email=invitation['invitee_email'],
             subject=subject,
-            html_content=body_html,
-            text_content=body_text
+            plain_content=body_text,
+            html_content=body_html
         )
         
         if result['success']:
@@ -1131,9 +1142,9 @@ def send_bulk_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
 def send_parent_invitation_email(invitation: Dict[str, Any]) -> bool:
     """Send parent invitation email using SendGrid"""
     try:
-        from shared_utils.sendgrid_utils import SendGridEmailService
+        from tsa_shared.sendgrid_service import SendGridService
         
-        sendgrid_service = SendGridEmailService()
+        sendgrid_service = SendGridService()
         
         student_name = f"{invitation.get('student_first_name', '')} {invitation.get('student_last_name', '')}".strip()
         if not student_name:
@@ -1210,11 +1221,11 @@ def send_parent_invitation_email(invitation: Dict[str, Any]) -> bool:
         Building Champions On and Off the Field
         """
         
-        result = sendgrid_service.send_email(
+        result = sendgrid_service._send_email(
             to_email=invitation['email'],
             subject=subject,
-            html_content=body_html,
-            text_content=body_text
+            plain_content=body_text,
+            html_content=body_html
         )
         
         if result['success']:

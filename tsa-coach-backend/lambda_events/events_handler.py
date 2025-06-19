@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 import sys
 sys.path.append('/opt/python')
 from tsa_shared.database import get_dynamodb_table, get_table_name, get_current_timestamp
-from shared_utils.dynamodb_models import Event, EventStatus, EventCategory, EventVisibility, TicketType
+from tsa_shared.table_models import Event, EventStatus, EventCategory, EventVisibility, TicketType
 from user_identifier import UserIdentifier
 from lambda_events.event_sync_service import EventSyncService
 from lambda_events.eventbrite_client import EventbriteAPIError

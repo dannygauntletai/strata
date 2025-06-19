@@ -9,21 +9,30 @@ import boto3
 import uuid
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
-from shared_config import get_config
+from tsa_shared.config import get_config
 
 
-# Import shared utilities
-from shared_utils import (
+# Import from centralized shared layer
+from tsa_shared import (
     create_response,
     parse_event_body,
     get_current_timestamp,
     validate_required_fields,
     validate_email_format,
-    get_dynamodb_table,
-    format_error_response,
-    log_api_event,
-    handle_cors_preflight
+    format_error_response
 )
+
+def get_dynamodb_table(table_name):
+    import boto3
+    dynamodb = boto3.resource('dynamodb')
+    return dynamodb.Table(table_name)
+
+def log_api_event(event, context, message="API Request"):
+    print(f"{message}: {event.get('httpMethod')} {event.get('path')}")
+
+def handle_cors_preflight(event):
+    if event.get('httpMethod') == 'OPTIONS':
+        return create_response(204, {})
 
 
 config = get_config()
@@ -381,8 +390,38 @@ def send_bulk_parent_invitations(event: Dict[str, Any]) -> Dict[str, Any]:
 def send_parent_invitation_email(invitation: Dict[str, Any]) -> bool:
     """Send parent invitation email using SendGrid"""
     try:
-        from shared_utils.sendgrid_utils import send_parent_invitation_email as send_email
-        return send_email(invitation)
+        from tsa_shared.sendgrid_service import SendGridService
+        
+        # Create SendGrid service and send invitation email
+        sendgrid_service = SendGridService()
+        
+        # Format invitation for email
+        student_name = invitation.get('student_name', 'Student')
+        subject = f"TSA Enrollment Invitation for {student_name}"
+        
+        # Create email content
+        email_content = f"""
+        Hi,
+        
+        You've been invited to enroll {student_name} at Texas Sports Academy.
+        
+        Coach: {invitation.get('coach_name', 'TSA Coach')}
+        School: {invitation.get('school_name', 'Texas Sports Academy')}
+        
+        Click here to complete enrollment: {invitation.get('invitation_url', '#')}
+        
+        Best regards,
+        Texas Sports Academy Team
+        """
+        
+        result = sendgrid_service.send_notification_email(
+            email=invitation['parent_email'],
+            subject=subject,
+            message=email_content,
+            notification_type='info'
+        )
+        
+        return result['success']
         
     except Exception as e:
         print(f"Error sending parent invitation email to {invitation['parent_email']}: {str(e)}")
